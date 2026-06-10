@@ -9,6 +9,7 @@ from pycram.datastructures.dataclasses import Context
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Cuttlery, Plate, Cup, Tableware
+from semantic_digital_twin.spatial_types import Point3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body, SemanticAnnotation
 from demos.bachelor_thesis.actions.predicate_mock import (
@@ -56,6 +57,8 @@ class EventDispatcher:
         """
         furniture and walls existing in the world
         """
+
+        self.environment_boundaries: list[Point3] = []
 
         ################################################################################################################
 
@@ -119,6 +122,8 @@ def update_perceived_objects(handler : EventDispatcher, data : list[SemanticAnno
         is_none.append("handler.correct_location_all_other_items")
     if (handler.dining_table is None) or not isinstance(handler.dining_table, HasSupportingSurface):
         is_none.append("handler.dining_table")
+    if handler.environment_boundaries is []:
+        raise Exception("No environment coordinate boundaries set. Please input list of corner points.")
 
     if is_none:
         raise Exception(f"{is_none} is not set or is not a supporting surface.")
@@ -154,7 +159,7 @@ def update_perceived_objects(handler : EventDispatcher, data : list[SemanticAnno
                 handler.support_relation_cache,
             )
 
-            is_reachable = reachable(obj, context)
+            is_reachable = reachable(obj, context, handler.environment_boundaries)
 
             if is_reachable:
                 handler.reachable_objects.append(obj)

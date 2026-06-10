@@ -9,6 +9,7 @@ from semantic_digital_twin.reasoning.queries import semantic_annotations_on_surf
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface, HasRootBody
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Food, Cuttlery, Plate, Cup, Bowl, \
     Bottle, CounterTop, Table, ShelfLayer
+from semantic_digital_twin.spatial_types import Point3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.reasoning.predicates import is_supported_by
 
@@ -116,33 +117,32 @@ def human_near() -> bool:
     
 
 
-def reachable(object : SemanticAnnotation, context: Context) -> bool:
+def reachable(object : SemanticAnnotation, context: Context, boundaries_environment: list[Point3]) -> bool:
     # debug, WIP for later
     world = context.world
     robot = context.robot
     object_pose = world.get_body_by_name(object.name).global_pose
+    print(f"object {object.name}---------------------------")
+
+    print(f"{object_pose.x}, {object_pose.y}, {object_pose.z}")
 
     print("calculate with costmap...")
-    pickup_loc = CostmapLocation(
+
+    cL = CostmapLocation(
         target=object_pose,
-        reachable_arm=Arms.LEFT,
         reachable=True,
+        reachable_arm=None,
         context=context,
+        allowed_area_points=boundaries_environment,
+        samples=30
     )
-    print(f"object {object.name}---------------------------")
-    #print(f"pickup location: {pickup_loc}")
-    # Tries to find a pick-up position for the robot that uses the given arm
+    costmap = cL.setup_costmaps(cL.target, cL.visible, cL.reachable)
 
     try:
-        pickup_pose = pickup_loc.ground()
-        print(f"pickup_pose: ({pickup_pose.x}, {pickup_pose.y}, {pickup_pose.z})")
+        pickup_pose = cL.resolve()
+        return True
     except StopIteration:
         pickup_pose = None
-        print("no pickup pose found")
-
-
-    if pickup_pose is None:
         return False
 
-    return True
 

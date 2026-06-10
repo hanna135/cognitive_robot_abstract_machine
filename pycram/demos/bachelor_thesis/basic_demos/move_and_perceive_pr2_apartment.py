@@ -72,6 +72,12 @@ def main():
     dispatcher.correct_location_tableware_clean = world.get_semantic_annotation_by_name("coffee_table")
     dispatcher.correct_location_tableware_dirty = world.get_semantic_annotation_by_name("table_area_main")
     dispatcher.correct_location_all_other_items = world.get_semantic_annotation_by_name("counter")
+    dispatcher.environment_boundaries = [
+        Point3(x=-0.599, y=6.5, z=0),
+        Point3(x=4.53, y=7.05, z=0),
+        Point3(x=0.357, y=-2.24, z=0),
+        Point3(x=5.47, y=-1.65),
+    ]
 
 
     #-----------------------------------------------------------------------------------------------------------------------

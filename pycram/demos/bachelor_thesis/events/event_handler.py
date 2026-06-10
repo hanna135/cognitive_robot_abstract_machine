@@ -5,6 +5,7 @@ from rdflib.plugins.sparql.parser import PrefixedName
 
 from demos.bachelor_thesis.classes_and_methods.tasks import SetTableTask, CleanTableTask, PutAwayObjectTask, \
     LoadDishwasherTask, UnloadDishwasherTask
+from pycram.datastructures.dataclasses import Context
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Cuttlery, Plate, Cup, Tableware
@@ -88,7 +89,7 @@ class EventDispatcher:
         if listener in self._listeners:
             self._listeners.remove(listener)
 
-    def trigger_event(self, event_data : list[Body], world : World) -> None:
+    def trigger_event(self, event_data : list[Body], world : World, context: Context) -> None:
         """Fire the event, passing event_data to every listener."""
         sem_annotations = []
         for data in event_data:
@@ -100,11 +101,11 @@ class EventDispatcher:
                     print(f"Couldn't find Semantic Annotation for {data.name}")
 
         for listener in self._listeners:
-            listener(self, sem_annotations, world)
+            listener(self, sem_annotations, world, context)
 
 
 # Usage example
-def update_perceived_objects(handler : EventDispatcher, data : list[SemanticAnnotation], world : World) -> None:
+def update_perceived_objects(handler : EventDispatcher, data : list[SemanticAnnotation], world : World, context: Context) -> None:
     is_none = []
     if (handler.correct_location_drinks is None) or not isinstance(handler.correct_location_drinks, HasSupportingSurface):
         is_none.append("handler.correct_location_drinks")
@@ -153,7 +154,7 @@ def update_perceived_objects(handler : EventDispatcher, data : list[SemanticAnno
                 handler.support_relation_cache,
             )
 
-            is_reachable = reachable(obj)
+            is_reachable = reachable(obj, context)
 
             if is_reachable:
                 handler.reachable_objects.append(obj)
@@ -166,7 +167,7 @@ def update_perceived_objects(handler : EventDispatcher, data : list[SemanticAnno
     print_perceived_objects(handler)
 
 
-def trigger_task(handler: EventDispatcher, data : list[SemanticAnnotation], world : World) -> None:
+def trigger_task(handler: EventDispatcher, data : list[SemanticAnnotation], world : World, context: Context) -> None:
     _trigger_set_table(handler, world)
     _trigger_clean_table(handler, data, world)
     _trigger_put_away_object(handler, world)
@@ -192,6 +193,7 @@ def _trigger_set_table(handler: EventDispatcher, world: World) -> None:
                     task.update_to_current_world_state(
                         world,
                         handler.perceived_objects,
+                        handler.reachable_objects,
                         handler.surface_annotation_cache,
                     )
                 else:
@@ -204,6 +206,7 @@ def _trigger_set_table(handler: EventDispatcher, world: World) -> None:
                     handler.dining_table,
                     world=world,
                     perceived_objects=handler.perceived_objects,
+                    reachable_objects=handler.reachable_objects,
                     surface_cache=handler.surface_annotation_cache,
                 )
             )
@@ -222,7 +225,7 @@ def _trigger_clean_table(handler: EventDispatcher, data: list[SemanticAnnotation
             if task.name == ("clean_table_task_" + table_name):
                 exists = True
                 if handler.perceived_objects_changed:
-                    task.update_to_current_world_state(world, handler.perceived_objects)
+                    task.update_to_current_world_state(world, handler.perceived_objects, handler.reachable_objects)
                 else:
                     # skip update task {task.name}: perceived objects unchanged
                     pass
@@ -230,7 +233,7 @@ def _trigger_clean_table(handler: EventDispatcher, data: list[SemanticAnnotation
         if not exists:
             handler.activated_tasks.append(
                 CleanTableTask("clean_table_task_" + table_name, handler.dining_table, world=world,
-                               perceived_objects=handler.perceived_objects))
+                               perceived_objects=handler.perceived_objects, reachable_objects= handler.reachable_objects))
 
 def _trigger_put_away_object(handler: EventDispatcher, world: World) -> None:
     # trigger put away object
@@ -241,13 +244,14 @@ def _trigger_put_away_object(handler: EventDispatcher, world: World) -> None:
             if task.name == task_name:
                 exists = True
                 if handler.perceived_objects_changed:
-                    task.update_to_current_world_state(world, handler.perceived_objects)
+                    task.update_to_current_world_state(world, handler.perceived_objects, handler.reachable_objects)
                 else:
                     # skip update task, perceived objects unchanged
                     pass
         if not exists:
             handler.activated_tasks.append(PutAwayObjectTask(task_name, required_objects=[obj], world=world,
-                                                             perceived_objects=handler.perceived_objects))
+                                                             perceived_objects=handler.perceived_objects,
+                                                             reachable_objects=handler.reachable_objects))
 
 def _perceive_dishware(handler: EventDispatcher) -> list[SemanticAnnotation]:
     perceived_dishware = []
@@ -281,6 +285,7 @@ def _trigger_load_dishwasher(handler: EventDispatcher, world: World) -> None:
                     task.update_to_current_world_state(
                         world,
                         handler.perceived_objects,
+                        handler.reachable_objects,
                         surface_cache=handler.surface_annotation_cache,
                         support_cache=handler.support_relation_cache,
                         required_objects=load_dishwasher_objects,
@@ -293,8 +298,9 @@ def _trigger_load_dishwasher(handler: EventDispatcher, world: World) -> None:
                 LoadDishwasherTask(
                     load_dishwasher_task,
                     handler.perceived_objects,
-                    handler.correct_location_tableware_dirty,
-                    world,
+                    reachable_objects=handler.reachable_objects,
+                    location_dishes=handler.correct_location_tableware_dirty,
+                    world=world,
                     surface_cache=handler.surface_annotation_cache,
                     support_cache=handler.support_relation_cache,
                     required_objects=load_dishwasher_objects,
@@ -340,7 +346,8 @@ def _trigger_unload_dishwasher(handler: EventDispatcher, world: World) -> None:
                 UnloadDishwasherTask(
                     unload_dishwasher_task,
                     handler.perceived_objects,
-                    world,
+                    reachable_objects=handler.reachable_objects,
+                    world=world,
                     surface_cache=handler.surface_annotation_cache,
                     required_objects=unload_dishwasher_objects,
                 )

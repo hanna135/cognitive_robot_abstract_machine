@@ -39,6 +39,7 @@ class Task(ABC):
     name: str
     required_objects: list
     perceived_objects: list[SemanticAnnotation]
+    reachable_objects: list[SemanticAnnotation]
     reward: float
     duration: float
     world: World
@@ -77,7 +78,7 @@ class Task(ABC):
         constraints = []
 
         for obj in self.required_objects:
-            if reachable(obj):
+            if obj in self.reachable_objects:
                 constraints.append(True)
             else:
                 constraints.append(False)
@@ -129,7 +130,7 @@ class Task(ABC):
 
 class PutAwayObjectTask(Task):
 
-    def __init__(self, name : str, required_objects : list[SemanticAnnotation], world: World, perceived_objects : list[SemanticAnnotation]):
+    def __init__(self, name : str, required_objects : list[SemanticAnnotation], world: World, perceived_objects : list[SemanticAnnotation], reachable_objects: list[SemanticAnnotation]):
         ## different for all instances of this task ##
         self.name = name
         self.required_objects = required_objects
@@ -141,6 +142,7 @@ class PutAwayObjectTask(Task):
         ## world stuff ##
         self.world = world
         self.perceived_objects = perceived_objects
+        self.reachable_objects = reachable_objects
 
     def precondition(self):
         return self.preconditions_helper()
@@ -170,9 +172,10 @@ class PutAwayObjectTask(Task):
         return self.calculate_feasibility_helper(weight_preconditions, weight_constraints)
 
 
-    def update_to_current_world_state(self, world: World, perceived_objects : list[SemanticAnnotation]):
+    def update_to_current_world_state(self, world: World, perceived_objects : list[SemanticAnnotation], reachable_objects: list[SemanticAnnotation]):
         self.world = world
         self.perceived_objects = perceived_objects
+        self.reachable_objects = reachable_objects
 
 
 class SetTableTask(Task):
@@ -184,6 +187,7 @@ class SetTableTask(Task):
         table: Table,
         world: World,
         perceived_objects: list[SemanticAnnotation],
+        reachable_objects: list[SemanticAnnotation],
         surface_cache: dict | None = None,
     ):
         ## different for all instances of this task ##
@@ -199,6 +203,7 @@ class SetTableTask(Task):
         ## world stuff ##
         self.world = world
         self.perceived_objects = perceived_objects
+        self.reachable_objects = reachable_objects
         self.surface_cache = surface_cache
 
     def precondition(self):
@@ -233,7 +238,7 @@ class SetTableTask(Task):
             for ob in self.perceived_objects:
                 if isinstance(ob, obj):
                     found = True
-                    constraints.append(reachable(ob))
+                    constraints.append(ob in self.reachable_objects)
                     break
             if not found:
                 constraints.append(False)
@@ -268,10 +273,12 @@ class SetTableTask(Task):
         self,
         world: World,
         perceived_objects: list[SemanticAnnotation],
+        reachable_objects: list[SemanticAnnotation],
         surface_cache: dict | None = None,
     ):
         self.world = world
         self.perceived_objects = perceived_objects
+        self.reachable_objects = reachable_objects
         self.surface_cache = surface_cache
 
 class CleanTableTask(Task):
@@ -283,6 +290,7 @@ class CleanTableTask(Task):
         table: Table,
         world: World,
         perceived_objects: list[SemanticAnnotation],
+        reachable_objects: list[SemanticAnnotation],
         surface_cache: dict | None = None,
     ):
         ## different for all instances of this task ##
@@ -291,6 +299,7 @@ class CleanTableTask(Task):
         ## world stuff ##
         self.world = world
         self.perceived_objects = perceived_objects
+        self.reachable_objects = reachable_objects
         self.required_objects = []
         self.table = table
         self.surface_cache = surface_cache
@@ -333,10 +342,12 @@ class CleanTableTask(Task):
         self,
         world: World,
         perceived_objects: list[SemanticAnnotation],
+        reachable_objects: list[SemanticAnnotation],
         surface_cache: dict | None = None,
     ):
         self.world = world
         self.perceived_objects = perceived_objects
+        self.reachable_objects = reachable_objects
         self.surface_cache = surface_cache
         self.required_objects = []
 
@@ -368,6 +379,7 @@ class LoadDishwasherTask(Task):
         self,
         name: str,
         perceived_objects: list[SemanticAnnotation],
+        reachable_objects: list[SemanticAnnotation],
         location_dishes: HasSupportingSurface,
         world: World,
         surface_cache: dict | None = None,
@@ -377,6 +389,7 @@ class LoadDishwasherTask(Task):
         self.location_dishes = location_dishes      # where the dishes are that are supposed to be put away (e.g. kitchen counter)
         self.name = name
         self.perceived_objects = perceived_objects
+        self.reachable_objects = reachable_objects
         self.required_objects = [] if required_objects is None else list(required_objects)
         self.world = world
         self.surface_cache = surface_cache
@@ -434,7 +447,7 @@ class LoadDishwasherTask(Task):
         # True, if dishwasher tab is reachable
         # False, if dishwasher tab unreachable or not perceived
         if self.dishwasher_tab is not None:
-            dishwasher_tab_bool = reachable(self.dishwasher_tab)
+            dishwasher_tab_bool = (self.dishwasher_tab in self.reachable_objects)
         else:
             dishwasher_tab_bool = False
 
@@ -474,11 +487,13 @@ class LoadDishwasherTask(Task):
         self,
         world: World,
         perceived_objects: list[SemanticAnnotation],
+        reachable_objects: list[SemanticAnnotation],
         surface_cache: dict | None = None,
         support_cache: dict | None = None,
         required_objects: list[SemanticAnnotation] | None = None,
     ):
         self.perceived_objects = perceived_objects
+        self.reachable_objects = reachable_objects
         self.required_objects = []
         self.world = world
         self.surface_cache = surface_cache
@@ -522,12 +537,14 @@ class UnloadDishwasherTask(Task):
         self,
         name: str,
         perceived_objects: list[SemanticAnnotation],
+        reachable_objects: list[SemanticAnnotation],
         world: World,
         surface_cache: dict | None = None,
         required_objects: list[SemanticAnnotation] | None = None,
     ):
         self.name = name
         self.perceived_objects = perceived_objects
+        self.reachable_objects = reachable_objects
         self.required_objects = [] if required_objects is None else list(required_objects)
         self.world = world
         self.surface_cache = surface_cache
@@ -581,11 +598,13 @@ class UnloadDishwasherTask(Task):
         self,
         world: World,
         perceived_objects: list[SemanticAnnotation],
+        reachable_objects: list[SemanticAnnotation],
         surface_cache: dict | None = None,
         required_objects: list[SemanticAnnotation] | None = None,
     ):
         self.perceived_objects = perceived_objects
         self.required_objects = []
+        self.reachable_objects = reachable_objects
         self.world = world
         self.surface_cache = surface_cache
 

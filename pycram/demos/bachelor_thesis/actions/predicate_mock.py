@@ -2,6 +2,9 @@ from contextlib import contextmanager
 
 from typing_extensions import Tuple
 
+from pycram.datastructures.dataclasses import Context
+from pycram.datastructures.enums import Arms
+from pycram.locations.locations import CostmapLocation
 from semantic_digital_twin.reasoning.queries import semantic_annotations_on_surfaces
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface, HasRootBody
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Food, Cuttlery, Plate, Cup, Bowl, \
@@ -113,7 +116,32 @@ def human_near() -> bool:
     
 
 
-def reachable(object : SemanticAnnotation) -> bool:
+def reachable(object : SemanticAnnotation, context: Context) -> bool:
     # debug, WIP for later
+    world = context.world
+    robot = context.robot
+    object_pose = world.get_body_by_name(object.name).global_pose
+
+    print("calculate with costmap...")
+    pickup_loc = CostmapLocation(
+        target=object_pose,
+        reachable_arm=Arms.LEFT,
+        reachable=True,
+        context=context,
+    )
+    print(f"object {object.name}---------------------------")
+    #print(f"pickup location: {pickup_loc}")
+    # Tries to find a pick-up position for the robot that uses the given arm
+
+    try:
+        pickup_pose = pickup_loc.ground()
+    except StopIteration:
+        pickup_pose = None
+
+    print(f"pickup_pose: ({pickup_pose.x}, {pickup_pose.y}, {pickup_pose.z})")
+
+    if pickup_pose is None:
+        return False
+
     return True
 

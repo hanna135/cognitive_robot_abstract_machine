@@ -188,7 +188,7 @@ def simulate_perception(
             time.sleep(RVIZ_PUBLISH_WAIT_SECONDS)
 
         # dispatch perceived bodies event
-        dispatcher.trigger_event(visible_bodies, world)
+        dispatcher.trigger_event(visible_bodies, world, context)
         return visible_bodies
 
 if __name__ == '__main__':

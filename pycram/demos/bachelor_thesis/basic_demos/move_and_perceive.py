@@ -92,7 +92,7 @@ def main():
         )
         world.merge_world_at_pose(
             pitcher,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[2], world),
+            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(Pose(Point3(x=4.3, y=1.52, z=2), Quaternion(0, 0, 0, 1)), world),
         )
         world.merge_world_at_pose(
             coke,
@@ -286,7 +286,7 @@ def main():
 
     print_sorted_task_list(sort_tasks(dispatcher.activated_tasks, 300), 300)
 
-    res = compare_robot_world_with_real(dispatcher, world)
+    res = compare_robot_world_with_real(dispatcher, world, context)
     print(res)
 
     return res, dispatcher.perceived_objects, world.bodies

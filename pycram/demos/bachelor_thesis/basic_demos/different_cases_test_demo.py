@@ -212,7 +212,7 @@ with simulated_robot:
     # for plan in plan_driving:
     #     plan.perform()
     #     simulate_perception(world, dispatcher, context, hsrb)
-    dispatcher.trigger_event([world.get_body_by_name("bowl.stl"), world.get_body_by_name("spoon.stl")], world)
+    dispatcher.trigger_event([world.get_body_by_name("bowl.stl"), world.get_body_by_name("spoon.stl")], world, context)
     task1 = None
 
     for task in dispatcher.activated_tasks:

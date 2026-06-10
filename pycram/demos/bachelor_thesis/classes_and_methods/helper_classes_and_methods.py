@@ -147,7 +147,7 @@ def body_name_contains_keyword(body: Body, keyword: str) -> bool:
     return False
 
 
-def compare_robot_world_with_real(dispatcher: EventDispatcher, world: World) -> list[list[float | None]]:
+def compare_robot_world_with_real(dispatcher: EventDispatcher, world: World, context: Context) -> list[list[float | None]]:
     real_world_dispatcher = EventDispatcher()
     real_world_dispatcher.correct_location_tableware_clean = dispatcher.correct_location_tableware_clean
     real_world_dispatcher.correct_location_tableware_dirty = dispatcher.correct_location_tableware_dirty
@@ -161,7 +161,7 @@ def compare_robot_world_with_real(dispatcher: EventDispatcher, world: World) -> 
     real_world_dispatcher.known_furniture = dispatcher.known_furniture
 
     # dispatcher gets all semantically annotated objects in the world -> same case as if robot has found all objects
-    real_world_dispatcher.trigger_event(world.bodies, world)
+    real_world_dispatcher.trigger_event(world.bodies, world, context=context)
 
     result = _print_task_comparison_robot_real(dispatcher, real_world_dispatcher)
     return result

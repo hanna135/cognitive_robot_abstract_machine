@@ -271,7 +271,7 @@ def main():
 
     print_sorted_task_list(sort_tasks(dispatcher.activated_tasks, 300), 300)
 
-    res = compare_robot_world_with_real(dispatcher, world)
+    res = compare_robot_world_with_real(dispatcher, world, context)
     print(res)
 
     return res

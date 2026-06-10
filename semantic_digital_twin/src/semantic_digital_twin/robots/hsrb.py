@@ -196,7 +196,18 @@ class HSRBArm(Arm[HSRBGripper], HasSensors[HSRBHandCamera]):
             state_type=StaticJointState.PARK,
         )
 
-        return [arm_park]
+        arm_park_high = JointState.from_mapping(
+            name=PrefixedName("arm_park_high", prefix=self.name.name),
+            mapping=dict(
+                zip(
+                    self.active_connections,
+                    [-3.0, 1.5, -1.85, 0.0],  # adjust these until the arm clears the camera
+                )
+            ),
+            state_type=StaticJointState.PARK_HIGH,
+        )
+
+        return [arm_park, arm_park_high]
 
     @classmethod
     def setup_default_configuration_in_world_below_robot_root(

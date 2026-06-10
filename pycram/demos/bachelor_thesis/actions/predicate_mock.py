@@ -135,10 +135,11 @@ def reachable(object : SemanticAnnotation, context: Context) -> bool:
 
     try:
         pickup_pose = pickup_loc.ground()
+        print(f"pickup_pose: ({pickup_pose.x}, {pickup_pose.y}, {pickup_pose.z})")
     except StopIteration:
         pickup_pose = None
+        print("no pickup pose found")
 
-    print(f"pickup_pose: ({pickup_pose.x}, {pickup_pose.y}, {pickup_pose.z})")
 
     if pickup_pose is None:
         return False

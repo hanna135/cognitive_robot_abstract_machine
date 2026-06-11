@@ -340,6 +340,7 @@ def _trigger_unload_dishwasher(handler: EventDispatcher, world: World) -> None:
                     task.update_to_current_world_state(
                         world,
                         handler.perceived_objects,
+                        reachable_objects=handler.reachable_objects,
                         surface_cache=handler.surface_annotation_cache,
                         required_objects=unload_dishwasher_objects,
                     )

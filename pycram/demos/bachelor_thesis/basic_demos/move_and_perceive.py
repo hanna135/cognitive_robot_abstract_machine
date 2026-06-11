@@ -17,6 +17,7 @@ from pycram.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorso
 from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.exceptions import WorldEntityNotFoundError
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface
 from semantic_digital_twin.world_description.geometry import Color
@@ -28,6 +29,8 @@ from semantic_digital_twin.robots.hsrb import HSRB
 from pycram.datastructures.dataclasses import Context
 from demos.bachelor_thesis.hsrb_setup_world import hsrb_setup_world
 
+import random
+
 from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import Environment, \
     timed_plan, timed_parse_stl, debug_task_list_for_demo, print_sorted_task_list, sort_tasks, \
     compare_robot_world_with_real
@@ -35,6 +38,7 @@ from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import
 
 def main():
     environment = Environment.SuturoApartmentLab
+    random_set_of_objects = True
 
     #------------------ standard setup -------------------------------------------------------------------------------------
     world, dispatcher = hsrb_setup_world(environment=environment)
@@ -54,89 +58,89 @@ def main():
 
     #-----------------------------------------------------------------------------------------------------------------------
 
-
+    semantic_objects = []
 
     bowl = timed_parse_stl("bowl", "bowl.stl")
+    semantic_objects.append(bowl)
 
     spoon = timed_parse_stl("spoon", "spoon.stl")
+    semantic_objects.append(spoon)
 
     pitcher = timed_parse_stl("pitcher", "Static_MilkPitcher.stl")
+    semantic_objects.append(pitcher)
 
     coke = timed_parse_stl("coke", "Static_CokeBottle.stl")
+    semantic_objects.append(coke)
 
     jeroen_cup = timed_parse_stl("jeroen cup", "jeroen_cup.stl")
+    semantic_objects.append(jeroen_cup)
 
     dishwasher_tab = timed_parse_stl("dishwasher tab", "dishwasher_tab.stl")
+    semantic_objects.append(dishwasher_tab)
 
     banana = timed_parse_stl("banana", "banana.stl")
+    semantic_objects.append(banana)
 
     bread = timed_parse_stl("bread", "bread.stl")
+    semantic_objects.append(bread)
 
     knife = timed_parse_stl("knife", "knife.stl")
+    semantic_objects.append(knife)
 
     plate = timed_parse_stl("plate", "plate.stl")
+    semantic_objects.append(plate)
 
 
 
-    locs = random_location_list(world, 10)
+    locs = random_location_list(world, len(semantic_objects))
 
 
     with world.modify_world():
-        world.merge_world_at_pose(
-            bowl,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[0], world),
-        )
-        world.merge_world_at_pose(
-            spoon,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[1], world), #Pose(Point3(16.5997, 2.69144, 0.4), orientation=Quaternion(0,0,0,1)), world),
-        )
-        world.merge_world_at_pose(
-            pitcher,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(Pose(Point3(x=4.3, y=1.52, z=2), Quaternion(0, 0, 0, 1)), world),
-        )
-        world.merge_world_at_pose(
-            coke,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[3], world),
-        )
-        world.merge_world_at_pose(
-            jeroen_cup,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[4], world),
-        )
-        world.merge_world_at_pose(
-            dishwasher_tab,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[5], world),
-        )
-        world.merge_world_at_pose(
-            banana,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[6], world),
-        )
-        world.merge_world_at_pose(
-            bread,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[7], world),
-        )
-        world.merge_world_at_pose(
-            knife,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[8], world),
-        )
-        world.merge_world_at_pose(
-            plate,
-            pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[9], world),
-        )
+        for i in range(0, len(semantic_objects)):
+            print(i)
+            # true if not random_set, if random_set than randomness has to decide if true
+            if not random_set_of_objects or random.random() < 0.7:
+                world.merge_world_at_pose(
+                    semantic_objects[i],
+                    pose_to_homogeneous_transformation_matrix_from_xyz_quaternion(locs[i], world)
+                )
 
-        world.add_semantic_annotations(
-            [
-                Bowl(root=world.get_body_by_name("bowl.stl"), name=PrefixedName("bowl.stl")),
-                Spoon(root=world.get_body_by_name("spoon.stl"), name=PrefixedName("spoon.stl")),
-                Bottle(root=world.get_body_by_name("Static_MilkPitcher.stl"), name=PrefixedName("Static_MilkPitcher.stl")),
-                Bottle(root=world.get_body_by_name("Static_CokeBottle.stl"), name=PrefixedName("Static_CokeBottle.stl")),
-                Cup(root=world.get_body_by_name("jeroen_cup.stl"), name=PrefixedName("jeroen_cup.stl")),
-                DishwasherTab(root=world.get_body_by_name("dishwasher_tab.stl"), name=PrefixedName("dishwasher_tab.stl")),
-                Banana(root=world.get_body_by_name("banana.stl"), name=PrefixedName("banana.stl")),
-                Bread(root=world.get_body_by_name("bread.stl"), name=PrefixedName("bread.stl")),
-                Knife(root=world.get_body_by_name("knife.stl"), name=PrefixedName("knife.stl")),
-                Plate(root=world.get_body_by_name("plate.stl"), name=PrefixedName("plate.stl")),
-            ]
-        )
+
+        semantic_annotations = [
+            (Bowl, "bowl.stl"),
+            (Spoon, "spoon.stl"),
+            (Bottle, "Static_MilkPitcher.stl"),
+            (Bottle, "Static_CokeBottle.stl"),
+            (Cup, "jeroen_cup.stl"),
+            (DishwasherTab, "dishwasher_tab.stl"),
+            (Banana, "banana.stl"),
+            (Bread, "bread.stl"),
+            (Knife, "knife.stl"),
+            (Plate, "plate.stl")
+        ]
+
+        for sem_ann in semantic_annotations:
+            try:
+                obj = sem_ann[0](root=world.get_body_by_name(sem_ann[1]), name=PrefixedName(sem_ann[1]))
+                world.add_semantic_annotation(obj)
+                print(obj)
+            except WorldEntityNotFoundError:
+                pass
+
+        # world.add_semantic_annotations(
+        #     [
+        #         Bowl(root=world.get_body_by_name("bowl.stl"), name=PrefixedName("bowl.stl")),
+        #         Spoon(root=world.get_body_by_name("spoon.stl"), name=PrefixedName("spoon.stl")),
+        #         Bottle(root=world.get_body_by_name("Static_MilkPitcher.stl"), name=PrefixedName("Static_MilkPitcher.stl")),
+        #         Bottle(root=world.get_body_by_name("Static_CokeBottle.stl"), name=PrefixedName("Static_CokeBottle.stl")),
+        #         Cup(root=world.get_body_by_name("jeroen_cup.stl"), name=PrefixedName("jeroen_cup.stl")),
+        #         DishwasherTab(root=world.get_body_by_name("dishwasher_tab.stl"), name=PrefixedName("dishwasher_tab.stl")),
+        #         Banana(root=world.get_body_by_name("banana.stl"), name=PrefixedName("banana.stl")),
+        #         Bread(root=world.get_body_by_name("bread.stl"), name=PrefixedName("bread.stl")),
+        #         Knife(root=world.get_body_by_name("knife.stl"), name=PrefixedName("knife.stl")),
+        #         Plate(root=world.get_body_by_name("plate.stl"), name=PrefixedName("plate.stl")),
+        #     ]
+        # )
 
         supporting_surfaces = []
         supporting_surfaces.append(world.get_semantic_annotation_by_name("shelf_1"))

@@ -3,8 +3,10 @@ import os
 from typing import Tuple
 
 import rclpy
+from ament_index_python import get_package_share_directory
 
 from semantic_digital_twin.adapters.mesh import STLParser
+from semantic_digital_twin.adapters.package_resolver import CompositePathResolver, FileUriResolver, PackageUriResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.spatial_types.spatial_types import (
@@ -67,7 +69,7 @@ def hsrb_setup_world(environment: Environment) -> Tuple[World, EventDispatcher]:
         apartment_world = KitchenEnvironment().get_world()
     elif environment == Environment.Pr2ApartmentLab:
         root = Body(name=PrefixedName("map"))
-        apartment_world = apartment_world = URDFParser.from_file(
+        apartment_world = URDFParser.from_file(
             os.path.join(
                 os.path.dirname(__file__),
                 "own_environments",
@@ -76,14 +78,10 @@ def hsrb_setup_world(environment: Environment) -> Tuple[World, EventDispatcher]:
         ).parse()
 
     elif environment == Environment.TestBed:
-        root = Body(name=PrefixedName("map"))
-        apartment_world = apartment_world = URDFParser.from_file(
-            os.path.join(
-                os.path.dirname(__file__),
-                "own_environments",
-                "isr-testbed.urdf",
-            )
+        apartment_world = URDFParser.from_file(
+            "package://isr_testbed/urdf/isr-testbed.urdf"
         ).parse()
+
 
     else:
         apartment_world = KitchenEnvironment().get_world()

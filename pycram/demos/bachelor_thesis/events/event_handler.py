@@ -43,6 +43,8 @@ class EventDispatcher:
         objects detected via robot perception
         """
 
+        self.perceived_furniture = []
+
         self.reachable_objects = []
         """
         objects detected via robot perception, that are reachable from one of the observe positions
@@ -102,6 +104,8 @@ class EventDispatcher:
                     sem_annotations.append(annotation)
                 except WorldEntityNotFoundError:
                     print(f"Couldn't find Semantic Annotation for {data.name}")
+            else:
+                self.perceived_furniture.append(data)
 
         for listener in self._listeners:
             listener(self, sem_annotations, world, context)
@@ -141,10 +145,8 @@ def update_perceived_objects(handler : EventDispatcher, data : list[SemanticAnno
 
             if isinstance(obj, Tableware) and handler.dishwasher_exists and is_supported_by_surface_cached(obj, world.get_semantic_annotation_by_name("dishwasher_rack"), handler.support_relation_cache):
                 obj.clean = True
-                print(f"clean: {obj.name}")
             elif isinstance(obj, Tableware):
                 obj.clean = False
-                print(f"dirty: {obj.name}")
 
 
             out_misplaced = misplaced(
@@ -188,7 +190,7 @@ def _trigger_set_table(handler: EventDispatcher, world: World) -> None:
     time = datetime.datetime(year=2026, month=5, day=6, hour=9, minute=10)  # for testing set the table
     # time = datetime.datetime(year=2026, month=5, day=6, hour=11, minute=10)  # for testing clean the table
 
-    if (time.hour == 9 or time.hour == 13 or time.hour == 19) and not human_near():
+    if (time.hour == 9 or time.hour == 13 or time.hour == 19) and not human_near() and furniture_perceived(handler, handler.dining_table.name.name):
         table_name = handler.dining_table.name.name
         exists = False
         for task in handler.activated_tasks:
@@ -223,7 +225,8 @@ def _trigger_clean_table(handler: EventDispatcher, data: list[SemanticAnnotation
     # time = datetime.datetime(year=2026, month=5, day=6, hour=9, minute=10)  # for testing set the table
     time = datetime.datetime(year=2026, month=5, day=6, hour=11, minute=10)  # for testing clean the table
     if (time.hour != 9 and time.hour != 13 and time.hour != 19) and not human_near() \
-            and not is_empty(handler.dining_table, data, world, handler.surface_annotation_cache):
+            and not is_empty(handler.dining_table, data, world, handler.surface_annotation_cache) \
+            and furniture_perceived(handler, handler.dining_table.name.name):
         table_name = handler.dining_table.name.name
         exists = False
         for task in handler.activated_tasks:
@@ -281,7 +284,8 @@ def _trigger_load_dishwasher(handler: EventDispatcher, world: World) -> None:
         # skip counterTop query: no perceived dishware/cutlery
         pass
 
-    if load_dishwasher_task is not None and handler.dishwasher_exists:
+    if load_dishwasher_task is not None and handler.dishwasher_exists \
+            and furniture_perceived(handler, "dishwasher_rack"):
         exists = False
         for task in handler.activated_tasks:
             if task.name == load_dishwasher_task:
@@ -331,7 +335,7 @@ def _trigger_unload_dishwasher(handler: EventDispatcher, world: World) -> None:
         # skip dishwasher_rack query: no perceived dishware/cutlery
         pass
 
-    if unload_dishwasher_task is not None and handler.dishwasher_exists:
+    if unload_dishwasher_task is not None and handler.dishwasher_exists and furniture_perceived(handler, "dishwasher_rack"):
         exists = False
         for task in handler.activated_tasks:
             if task.name == unload_dishwasher_task:
@@ -409,3 +413,12 @@ def print_perceived_objects(handler : EventDispatcher) -> None:
             f"{'YES' if is_reachable else 'NO':<10} | "
             f"{'YES' if is_misplaced else 'NO':<10} | "
             f"{str(location):<30} ")
+
+def furniture_perceived(handler : EventDispatcher, furniture_name_to_check: str) -> bool:
+    for fur in handler.perceived_furniture:
+        if fur.name.name == furniture_name_to_check:
+            return True
+        if furniture_name_to_check in fur.name.name:
+            return True
+
+    return False

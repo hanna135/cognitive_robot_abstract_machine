@@ -11,9 +11,7 @@ from time import sleep, time as tm
 import move_and_perceive, move_and_perceive_pr2_apartment
 from semantic_digital_twin.world_description.world_entity import Body, SemanticAnnotation
 
-
-# TODO: count tasks that are not found and count tasks that are partly found and count tasks that are correctly found
-# TODO: count how well each task is recognized
+# TODO: add other environments
 def main():
     dictionary = {
         "correctly recognized": 0,
@@ -38,7 +36,10 @@ def main():
     stats = []
     objects_perceived = []
     objects_in_world = []
-    iterations = 1
+
+    # CHANGE ITERATION COUNT HERE
+    iterations = 5
+
     for i in range(0, iterations):
         percents, objs_perceived, objs_in_world = move_and_perceive.main()
         stats.append(percents)

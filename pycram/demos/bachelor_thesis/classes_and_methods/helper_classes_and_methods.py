@@ -6,12 +6,13 @@ from docutils.parsers.rst.directives import percentage
 from typing_extensions import List
 
 from demos.bachelor_thesis.classes_and_methods.tasks import Task
-from demos.bachelor_thesis.events.event_handler import EventDispatcher
+from demos.bachelor_thesis.events.event_handler import EventDispatcher, print_perceived_objects
 from pycram.datastructures.dataclasses import Context
 from pycram.plans.factories import execute_single
 from pycram.plans.plan import Plan
 from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
+from semantic_digital_twin.reasoning.predicates import reachable
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Table, SideTable, Wardrobe, \
     Sofa, Cup, ShelfLayer
@@ -161,6 +162,9 @@ def compare_robot_world_with_real(dispatcher: EventDispatcher, world: World, con
     real_world_dispatcher.known_furniture = dispatcher.known_furniture
 
     # dispatcher gets all semantically annotated objects in the world -> same case as if robot has found all objects
+    real_world_dispatcher.perceived_objects = dispatcher.perceived_objects
+    real_world_dispatcher.misplaced_objects = dispatcher.misplaced_objects
+    real_world_dispatcher.reachable_objects = dispatcher.reachable_objects
     real_world_dispatcher.trigger_event(world.bodies, world, context=context)
 
     result = _print_task_comparison_robot_real(dispatcher, real_world_dispatcher)

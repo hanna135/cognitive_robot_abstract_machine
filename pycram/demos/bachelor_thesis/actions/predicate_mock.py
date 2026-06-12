@@ -118,15 +118,10 @@ def human_near() -> bool:
 
 
 def reachable(object : SemanticAnnotation, context: Context, boundaries_environment: list[Point3]) -> bool:
-    # debug, WIP for later
     world = context.world
     robot = context.robot
     object_pose = world.get_body_by_name(object.name).global_pose
-    print(f"object {object.name}---------------------------")
 
-    print(f"{object_pose.x}, {object_pose.y}, {object_pose.z}")
-
-    print("calculate with costmap...")
 
     cL = CostmapLocation(
         target=object_pose,

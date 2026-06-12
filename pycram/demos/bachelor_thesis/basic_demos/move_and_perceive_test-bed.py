@@ -48,8 +48,10 @@ with world.modify_world():
     for color in dishwasher_rack.bodies[0].visual.shapes:
         color.color = Color.RED()
 
+for bod in world.bodies:
+    print(bod.name)
 dispatcher.known_furniture = world.bodies
-print("done")
+
 # with world.modify_world():
 #     world.add_semantic_annotations(
 #         [

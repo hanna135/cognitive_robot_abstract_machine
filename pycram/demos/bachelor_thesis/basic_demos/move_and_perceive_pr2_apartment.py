@@ -53,8 +53,9 @@ def main():
         for color in dishwasher_rack.bodies[0].visual.shapes:
             color.color = Color.RED()
 
-        dispatcher.known_furniture = world.bodies
+    dispatcher.known_furniture = world.bodies
 
+    with world.modify_world():
         world.add_semantic_annotations(
             [
                 CounterTop(root=world.get_body_by_name("countertop"), name=PrefixedName("counter")),

@@ -4,7 +4,6 @@ from contextlib import contextmanager
 
 
 from demos.bachelor_thesis.actions.predicate_mock import (
-    reachable,
     is_empty,
     semantic_annotations_on_surface_cached,
     is_supported_by_surface_cached,
@@ -198,7 +197,13 @@ class SetTableTask(Task):
         self.required_objects = [Bowl, Plate, Spoon, Knife, Cup, Milk, Banana, Bread]
 
         self.reward = REWARD_PER_OBJECT * len(self.required_objects) + REWARD_CUTTLERY + REWARD_CUTTLERY + REWARD_PLATE + REWARD_NAVIGATE_TO_TABLE # 50 for each thing of cutlery and 100 for plate
-        self.duration = DURATION_PER_OBJECT * len(self.required_objects)
+
+        self.duration = 0
+        for ob in self.required_objects:
+            for obj in perceived_objects:
+                if isinstance(obj, ob):
+                    self.duration = self.duration + DURATION_PER_OBJECT
+                    break
 
         ## world stuff ##
         self.world = world
@@ -280,6 +285,14 @@ class SetTableTask(Task):
         self.perceived_objects = perceived_objects
         self.reachable_objects = reachable_objects
         self.surface_cache = surface_cache
+
+        self.duration = 0
+        for ob in self.required_objects:
+            for obj in perceived_objects:
+                if isinstance(obj, ob):
+                    self.duration = self.duration + DURATION_PER_OBJECT
+                    break
+
 
 class CleanTableTask(Task):
     table: Table

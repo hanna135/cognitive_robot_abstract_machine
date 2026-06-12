@@ -79,8 +79,16 @@ def hsrb_setup_world(environment: Environment) -> Tuple[World, EventDispatcher]:
 
     elif environment == Environment.TestBed:
         apartment_world = URDFParser.from_file(
-            "package://isr_testbed/urdf/isr-testbed.urdf"
+            os.path.join(
+                os.path.dirname(__file__),
+                "..",
+                "..",
+                "resources",
+                "worlds",
+                "isr-testbed.urdf",
+            )
         ).parse()
+        print(apartment_world.root)
 
 
     else:

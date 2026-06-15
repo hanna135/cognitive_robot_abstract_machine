@@ -1,3 +1,5 @@
+from typing_extensions import Any
+
 from demos.bachelor_thesis.actions.random_location_generator import random_location_list, \
     pose_to_homogeneous_transformation_matrix_from_xyz_quaternion
 from demos.bachelor_thesis.actions.simulate_perception import simulate_perception
@@ -23,12 +25,13 @@ import random
 
 from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import Environment, \
     timed_plan, timed_parse_stl, debug_task_list_for_demo, print_sorted_task_list, sort_tasks, \
-    compare_robot_world_with_real
+    compare_robot_world_with_real, print_locs_as_copy_paste_list, list_feasibility_of_each_task
+
 
 # fixed frame in rviz: 'root'
-def main():
+def main(locations: list[Any] = None):
     environment = Environment.SuturoApartmentLab
-    random_set_of_objects = True
+    random_set_of_objects = False
 
     # PR2 or HSRB
     robot = HSRB
@@ -84,13 +87,15 @@ def main():
     semantic_objects.append(plate)
 
 
-
-    locs = random_location_list(world, len(semantic_objects))
+    if locations is None:
+        locs = random_location_list(world, len(semantic_objects))
+        print_locs_as_copy_paste_list(locs)
+    else:
+        locs = locations
 
 
     with world.modify_world():
         for i in range(0, len(semantic_objects)):
-            print(i)
             # true if not random_set, if random_set than randomness has to decide if true
             if not random_set_of_objects or random.random() < 0.7:
                 world.merge_world_at_pose(
@@ -116,7 +121,6 @@ def main():
             try:
                 obj = sem_ann[0](root=world.get_body_by_name(sem_ann[1]), name=PrefixedName(sem_ann[1]))
                 world.add_semantic_annotation(obj)
-                print(obj)
             except WorldEntityNotFoundError:
                 pass
 
@@ -295,9 +299,22 @@ def main():
     res = compare_robot_world_with_real(dispatcher, world, context)
     print(res)
 
-    return res, dispatcher.perceived_objects, world.bodies
+
+    return res, dispatcher.perceived_objects, world.bodies, list_feasibility_of_each_task(dispatcher)
 
 
 
 if __name__ == "__main__":
-    main()
+    locs = [
+        Pose(Point3(x=4.34451, y=5.20153, z=0.52), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=4.41704, y=5.70009, z=0.52), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=3.14758, y=-1.88804, z=0.545), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=2.64776, y=-1.36981, z=0.545), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=3.14174, y=0.69104, z=0.845), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=4.32238, y=2.5949, z=0.44), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=0.182056, y=2.0052, z=0.75), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=1.53983, y=6.52527, z=0.71), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=2.37098, y=6.53524, z=0.73), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=2.10353, y=-1.20035, z=0.14), Quaternion(x=0, y=0, z=0, w=1)),
+    ]
+    main(locations=locs)

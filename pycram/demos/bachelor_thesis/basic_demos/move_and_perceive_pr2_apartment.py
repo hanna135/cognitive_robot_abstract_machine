@@ -125,7 +125,6 @@ def main():
 
     with world.modify_world():
         for i in range(0, len(semantic_objects)):
-            print(i)
             # true if not random_set, if random_set than randomness has to decide if true
             if not random_set_of_objects or random.random() < 0.7:
                 world.merge_world_at_pose(
@@ -150,7 +149,6 @@ def main():
             try:
                 obj = sem_ann[0](root=world.get_body_by_name(sem_ann[1]), name=PrefixedName(sem_ann[1]))
                 world.add_semantic_annotation(obj)
-                print(obj)
             except WorldEntityNotFoundError:
                 pass
 

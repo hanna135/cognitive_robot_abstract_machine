@@ -16,6 +16,7 @@ from semantic_digital_twin.reasoning.predicates import reachable
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Table, SideTable, Wardrobe, \
     Sofa, Cup, ShelfLayer
+from semantic_digital_twin.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
@@ -236,3 +237,60 @@ def print_object_locations(dispatcher: EventDispatcher, world: World) -> None:
             print(f"{body.name} at location ({body.global_pose.x}, {body.global_pose.y}, {body.global_pose.z})")
     print("#"*110)
 
+def print_locs_as_copy_paste_list(locs : list[Pose]):
+    print("locs = [")
+    for loc in locs:
+        print(f"    Pose(Point3(x={loc.x}, y={loc.y}, z={loc.z}), Quaternion(x={loc.to_quaternion().x}, y={loc.to_quaternion().y}, z={loc.to_quaternion().z}, w={loc.to_quaternion().w})),")
+    print("]")
+
+def list_feasibility_of_each_task(dispatcher: EventDispatcher):
+    dictio = {
+        "set_the_table: ": 0,
+        "clean_the_table: ": 0,
+        "load_the_dishwasher: ": 0,
+        "unload_the_dishwasher: ": 0,
+        "put_away_object_task_bowl": 0,
+        "put_away_object_task_spoon": 0,
+        "put_away_object_task_Static_MilkPitcher": 0,
+        "put_away_object_task_Static_CokeBottle": 0,
+        "put_away_object_task_jeroen_cup": 0,
+        "put_away_object_task_dishwasher_tab": 0,
+        "put_away_object_task_banana": 0,
+        "put_away_object_task_bread": 0,
+        "put_away_object_task_knife": 0,
+        "put_away_object_task_plate": 0,
+
+    }
+
+    for task in dispatcher.activated_tasks:
+
+        if "set_table" in task.name:
+            dictio["set_the_table"] = task.calculate_feasibility()
+        elif "clean_table" in task.name:
+            dictio["clean_the_table"] = task.calculate_feasibility()
+        elif "load_dishwasher" in task.name:
+            dictio["load_the_dishwasher"] = task.calculate_feasibility()
+        elif "unload_dishwasher" in task.name:
+            dictio["unload_the_dishwasher"] = task.calculate_feasibility()
+        elif "put_away_object_task_bowl" in task.name:
+            dictio["put_away_object_task_bowl"] = task.calculate_feasibility()
+        elif "put_away_object_task_spoon" in task.name:
+            dictio["put_away_object_task_spoon"] = task.calculate_feasibility()
+        elif "put_away_object_task_Static_MilkPitcher" in task.name:
+            dictio["put_away_object_task_Static_MilkPitcher"] = task.calculate_feasibility()
+        elif "put_away_object_task_Static_CokeBottle" in task.name:
+            dictio["put_away_object_task_Static_CokeBottle"] = task.calculate_feasibility()
+        elif "put_away_object_task_jeroen_cup" in task.name:
+            dictio["put_away_object_task_jeroen_cup"] = task.calculate_feasibility()
+        elif "put_away_object_task_dishwasher_tab" in task.name:
+            dictio["put_away_object_task_dishwasher_tab"] = task.calculate_feasibility()
+        elif "put_away_object_task_banana" in task.name:
+            dictio["put_away_object_task_banana"] = task.calculate_feasibility()
+        elif "put_away_object_task_bread" in task.name:
+            dictio["put_away_object_task_bread"] = task.calculate_feasibility()
+        elif "put_away_object_task_knife" in task.name:
+            dictio["put_away_object_task_knife"] = task.calculate_feasibility()
+        elif "put_away_object_task_plate" in task.name:
+            dictio["put_away_object_task_plate"] = task.calculate_feasibility()
+
+        return dictio

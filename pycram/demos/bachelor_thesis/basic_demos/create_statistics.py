@@ -9,6 +9,7 @@ import datetime
 from time import sleep, time as tm
 
 import move_and_perceive, move_and_perceive_pr2_apartment
+from semantic_digital_twin.spatial_types import Pose, Point3, Quaternion
 from semantic_digital_twin.world_description.world_entity import Body, SemanticAnnotation
 
 # TODO: add other environments
@@ -41,6 +42,21 @@ def main():
     iterations = 5
 
     for i in range(0, iterations):
+        locs_suturo_lab = [
+            Pose(Point3(x=4.34451, y=5.20153, z=0.52), Quaternion(x=0, y=0, z=0, w=1)),
+            Pose(Point3(x=4.41704, y=5.70009, z=0.52), Quaternion(x=0, y=0, z=0, w=1)),
+            Pose(Point3(x=3.14758, y=-1.88804, z=0.545), Quaternion(x=0, y=0, z=0, w=1)),
+            Pose(Point3(x=2.64776, y=-1.36981, z=0.545), Quaternion(x=0, y=0, z=0, w=1)),
+            Pose(Point3(x=3.14174, y=0.69104, z=0.845), Quaternion(x=0, y=0, z=0, w=1)),
+            Pose(Point3(x=4.32238, y=2.5949, z=0.44), Quaternion(x=0, y=0, z=0, w=1)),
+            Pose(Point3(x=0.182056, y=2.0052, z=0.75), Quaternion(x=0, y=0, z=0, w=1)),
+            Pose(Point3(x=1.53983, y=6.52527, z=0.71), Quaternion(x=0, y=0, z=0, w=1)),
+            Pose(Point3(x=2.37098, y=6.53524, z=0.73), Quaternion(x=0, y=0, z=0, w=1)),
+            Pose(Point3(x=2.10353, y=-1.20035, z=0.14), Quaternion(x=0, y=0, z=0, w=1)),
+        ]
+
+        # FOR COMPARABILITY BETWEEN HSRB AND PR2: set location list and set random_set_of_objects on false. Do one
+        # statistic test with the HSRB and one with the PR2
         percents, objs_perceived, objs_in_world = move_and_perceive.main()
         stats.append(percents)
         objects_perceived.append(objs_perceived)
@@ -246,6 +262,13 @@ def calculate_obj_percentage(key: str, dictionary: dict[str, Any]):
     else:
         res = dictionary[key][0]/dictionary[key][1]
         return res
+
+def calculate_feasibility_average(percentage_list: list[Any]) -> float:
+
+
+def create_diagram_for_feasibility_comparison(feasibility_hsrb: float, feasibility_pr2):
+    # TODO
+    pass
 
 
 

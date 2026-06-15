@@ -133,21 +133,36 @@ def simulate_perception(
     # print(visualize.map)
 
     if node is not None:
-        camera = world.get_body_by_name("head_rgbd_sensor_link")  # we use head mount instead of default camera
         camera_details = hsrb.get_default_camera()  # for simulation: use default stats
-        camera_pose = Pose(
-            position=Point3(x=camera.global_pose.x, y=camera.global_pose.y, z=camera.global_pose.z + 0.03),
-            orientation=camera.global_pose.to_quaternion())
-        forward_axis = np.asarray(
-            camera_details.forward_facing_axis.to_list(), dtype=float
-        ).reshape(-1)[:3]
-        alignment_quaternion = get_quaternion_between_two_vectors(
-            np.array([1.0, 0.0, 0.0], dtype=float),
-            forward_axis,
-        )
-        camera_quaternion = np.asarray(camera_pose.to_quaternion().to_list(), dtype=float)
-        aligned_quaternion = quaternion_multiply(camera_quaternion, alignment_quaternion)
-        camera_position = np.asarray(camera_pose.to_position().to_list(), dtype=float)[:3]
+        if hsrb.name.name == "HSRB":
+            camera = world.get_body_by_name("head_rgbd_sensor_link")  # we use head mount instead of default camera
+            camera_pose = Pose(
+                position=Point3(x=camera.global_pose.x, y=camera.global_pose.y, z=camera.global_pose.z + 0.03),
+                orientation=camera.global_pose.to_quaternion())
+            forward_axis = np.asarray(
+                camera_details.forward_facing_axis.to_list(), dtype=float
+            ).reshape(-1)[:3]
+            alignment_quaternion = get_quaternion_between_two_vectors(
+                np.array([1.0, 0.0, 0.0], dtype=float),
+                forward_axis,
+            )
+            camera_quaternion = np.asarray(camera_pose.to_quaternion().to_list(), dtype=float)
+            aligned_quaternion = quaternion_multiply(camera_quaternion, alignment_quaternion)
+            camera_position = np.asarray(camera_pose.to_position().to_list(), dtype=float)[:3]
+        else:
+            camera = camera_details
+            camera_pose = camera.root.global_pose
+            forward_axis = np.asarray(
+                camera.forward_facing_axis.to_list(), dtype=float
+            ).reshape(-1)[:3]
+            alignment_quaternion = get_quaternion_between_two_vectors(
+                np.array([1.0, 0.0, 0.0], dtype=float),
+                forward_axis,
+            )
+            camera_quaternion = np.asarray(camera_pose.to_quaternion().to_list(), dtype=float)
+            aligned_quaternion = quaternion_multiply(camera_quaternion, alignment_quaternion)
+            camera_position = np.asarray(camera_pose.to_position().to_list(), dtype=float)[:3]
+
         raytracer_camera_pose = Pose.from_xyz_quaternion(
             *camera_position,
             *aligned_quaternion,

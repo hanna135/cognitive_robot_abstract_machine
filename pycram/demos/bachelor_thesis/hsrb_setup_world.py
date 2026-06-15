@@ -9,6 +9,8 @@ from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.adapters.package_resolver import CompositePathResolver, FileUriResolver, PackageUriResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.robots.hsrb import HSRB
+from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
     Pose,
@@ -42,7 +44,7 @@ except ImportError:
 
 
 
-def hsrb_setup_world(environment: Environment) -> Tuple[World, EventDispatcher]:
+def hsrb_setup_world(environment: Environment, robot: type[PR2] | type[HSRB]) -> Tuple[World, EventDispatcher]:
     """
     return
     world : the world
@@ -51,9 +53,14 @@ def hsrb_setup_world(environment: Environment) -> Tuple[World, EventDispatcher]:
 
     logger.setLevel(logging.DEBUG)
 
-    hsrb_sem_world = URDFParser.from_xacro(
-        "package://hsr_description/robots/hsrb4s.urdf.xacro"
-    ).parse()
+    if robot == PR2:
+        hsrb_sem_world = URDFParser.from_xacro(
+            "package://iai_pr2_description/robots/pr2_with_ft2_cableguide.xacro"
+        ).parse()
+    elif robot == HSRB:
+        hsrb_sem_world = URDFParser.from_xacro(
+            "package://hsr_description/robots/hsrb4s.urdf.xacro"
+        ).parse()
 
     if environment == Environment.SuturoApartmentLab:
 

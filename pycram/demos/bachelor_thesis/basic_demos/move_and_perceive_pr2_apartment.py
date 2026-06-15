@@ -20,6 +20,7 @@ from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
+from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface, HasRootBody
 from semantic_digital_twin.world_description.geometry import Color, Scale
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Spoon, Bottle, Cup, ShelfLayer, \
@@ -35,13 +36,16 @@ from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import
     timed_plan, timed_parse_stl, debug_task_list_for_demo, print_sorted_task_list, sort_tasks, \
     compare_robot_world_with_real, print_object_locations
 
-
+# fixed frame in rviz: 'apartment/apartment_root'
 def main():
     environment = Environment.Pr2ApartmentLab
     random_set_of_objects = True
 
+    # PR2 or HSRB
+    robot = PR2
+
     #------------------ standard setup -------------------------------------------------------------------------------------
-    world, dispatcher = hsrb_setup_world(environment=environment)
+    world, dispatcher = hsrb_setup_world(environment=environment, robot=robot)
 
     with world.modify_world():
         dishwasher_rack = Table.create_with_new_body_in_world(
@@ -176,7 +180,11 @@ def main():
     except ImportError:
         node = None
 
-    hsrb = HSRB.from_world(world)
+    hsrb = robot.from_world(world)
+    if robot == HSRB:
+        arms = Arms.LEFT
+    else:
+        arms = Arms.BOTH
 
     context = Context(world=world, robot=hsrb)
 
@@ -189,12 +197,12 @@ def main():
 
     # get coordinates from publish point in rviz2
     plan_labels = [
-        "park left arm",
+        "park arm",
         "move torso1",
         "park left arm high",
         "navigate kitchen counter",
         "navigate coffee machine",
-        "park left arm",
+        "park arm",
         "move torso2",
         "navigate counter and dishwasher",
         "navigate table",
@@ -202,7 +210,7 @@ def main():
     ]
 
     plan_driving = [
-            timed_plan("park left arm", ParkArmsAction(Arms.LEFT), context),
+            timed_plan("park arm", ParkArmsAction(arms), context),
 
             timed_plan("move torso1", MoveTorsoAction(TorsoState.HIGH), context),
 
@@ -216,7 +224,7 @@ def main():
                 target_location=Pose(Point3(1.59057, 3.29541, 0), orientation=(Quaternion(z=-0.999835, w=0.0181642)),
                                      reference_frame=world.root), keep_joint_states = True), context),
 
-            timed_plan("park left arm", ParkArmsAction(Arms.LEFT), context),
+            timed_plan("park arm", ParkArmsAction(arms), context),
 
             timed_plan("move torso2", MoveTorsoAction(TorsoState.LOW), context),
 
@@ -240,25 +248,28 @@ def main():
         for index, (label, plan) in enumerate(zip(plan_labels, plan_driving), start=1):
             step_label = f"{index:02d}/{len(plan_driving)} {label}"
             print(step_label)
-            plan.perform()
-            visible_bodies = simulate_perception(
-                world,
-                dispatcher,
-                context,
-                hsrb,
+            if label == "park left arm high" and not hsrb.name.name == "HSRB":
+                pass
+            else:
+                plan.perform()
+                visible_bodies = simulate_perception(
+                    world,
+                    dispatcher,
+                    context,
+                    hsrb,
                 )
             visible_count = len(visible_bodies) if visible_bodies is not None else 0
 
     debug_task_list_for_demo(dispatcher)
 
-    print_object_locations(dispatcher, world)
+    #print_object_locations(dispatcher, world)
 
     print_sorted_task_list(sort_tasks(dispatcher.activated_tasks, 300), 300)
 
     res = compare_robot_world_with_real(dispatcher, world, context)
     print(res)
 
-    return res
+    return res, dispatcher.perceived_objects, world.bodies
 
 
 

@@ -9,6 +9,7 @@ from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
+from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Spoon, Bottle, Cup, ShelfLayer, \
     CounterTop, Table, DishwasherTab, Banana, Bread, Knife, Plate
@@ -24,13 +25,16 @@ from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import
     timed_plan, timed_parse_stl, debug_task_list_for_demo, print_sorted_task_list, sort_tasks, \
     compare_robot_world_with_real
 
-
+# fixed frame in rviz: 'root'
 def main():
     environment = Environment.SuturoApartmentLab
     random_set_of_objects = True
 
+    # PR2 or HSRB
+    robot = HSRB
+
     #------------------ standard setup -------------------------------------------------------------------------------------
-    world, dispatcher = hsrb_setup_world(environment=environment)
+    world, dispatcher = hsrb_setup_world(environment=environment, robot=robot)
 
     dispatcher.known_furniture = world.bodies
 
@@ -165,8 +169,12 @@ def main():
     except ImportError:
         node = None
 
-    hsrb = HSRB.from_world(world)
-
+    #hsrb = HSRB.from_world(world)
+    hsrb = robot.from_world(world)
+    if robot == HSRB:
+        arms = Arms.LEFT
+    else:
+        arms = Arms.BOTH
     context = Context(world=world, robot=hsrb)
 
     with world.modify_world():
@@ -196,7 +204,7 @@ def main():
     ]
 
     plan_driving = [
-            timed_plan("park left arm", ParkArmsAction(Arms.LEFT), context),
+            timed_plan("park left arm", ParkArmsAction(arms), context),
 
             # dishwasher
             timed_plan("navigate dishwasher", NavigateAction(
@@ -265,14 +273,19 @@ def main():
 
     with simulated_robot:
         for index, (label, plan) in enumerate(zip(plan_labels, plan_driving), start=1):
+            # skip park arms high for every other robot than hsrb
             step_label = f"{index:02d}/{len(plan_driving)} {label}"
-            plan.perform()
-            visible_bodies = simulate_perception(
-                world,
-                dispatcher,
-                context,
-                hsrb,
-            )
+            if label == "park arms high" and not hsrb.name.name == "HSRB":
+                pass
+            else:
+                print(step_label)
+                plan.perform()
+                visible_bodies = simulate_perception(
+                    world,
+                    dispatcher,
+                    context,
+                    hsrb,
+                )
             visible_count = len(visible_bodies) if visible_bodies is not None else 0
         debug_task_list_for_demo(dispatcher)
 

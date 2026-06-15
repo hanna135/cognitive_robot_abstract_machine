@@ -121,16 +121,22 @@ def reachable(object : SemanticAnnotation, context: Context, boundaries_environm
     world = context.world
     robot = context.robot
     object_pose = world.get_body_by_name(object.name).global_pose
-
+    if robot.name.name == "HSRB":
+        arm = Arms.LEFT
+    elif robot.name.name == "PR2":
+        arm = Arms.BOTH
+    else:
+        arm = None
 
     cL = CostmapLocation(
         target=object_pose,
         reachable=True,
-        reachable_arm=None,
+        reachable_arm=arm,
         context=context,
         allowed_area_points=boundaries_environment,
         samples=30
     )
+
     costmap = cL.setup_costmaps(cL.target, cL.visible, cL.reachable)
 
     try:

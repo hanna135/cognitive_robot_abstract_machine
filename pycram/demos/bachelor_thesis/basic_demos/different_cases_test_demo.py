@@ -35,7 +35,7 @@ from semantic_digital_twin.world_description.graph_of_convex_sets import navigat
     translate_free_space_to_where_condition
 
 #------------------ standard setup -------------------------------------------------------------------------------------
-world, dispatcher = hsrb_setup_world(Environment.SuturoApartmentLab)
+world, dispatcher = hsrb_setup_world(Environment.SuturoApartmentLab, robot=HSRB)
 
 
 

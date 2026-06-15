@@ -12,7 +12,7 @@ from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Spoon, Bottle, Cup, ShelfLayer, \
-    CounterTop, Table, DishwasherTab, Banana, Bread, Knife, Plate
+    CounterTop, Table, DishwasherTab, Banana, Bread, Knife, Plate, Milk
 from semantic_digital_twin.spatial_types import Point3, Quaternion
 from semantic_digital_twin.spatial_types.spatial_types import Pose, HomogeneousTransformationMatrix
 from semantic_digital_twin.robots.hsrb import HSRB
@@ -102,7 +102,7 @@ def main():
         semantic_annotations = [
             (Bowl, "bowl.stl"),
             (Spoon, "spoon.stl"),
-            (Bottle, "Static_MilkPitcher.stl"),
+            (Milk, "Static_MilkPitcher.stl"),
             (Bottle, "Static_CokeBottle.stl"),
             (Cup, "jeroen_cup.stl"),
             (DishwasherTab, "dishwasher_tab.stl"),

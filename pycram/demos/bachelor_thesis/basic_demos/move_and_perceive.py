@@ -29,12 +29,12 @@ from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import
 
 
 # fixed frame in rviz: 'root'
-def main(locations: list[Any] = None):
+def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None):
     environment = Environment.SuturoApartmentLab
     random_set_of_objects = False
 
     # PR2 or HSRB
-    robot = HSRB
+    robot = PR2
 
     #------------------ standard setup -------------------------------------------------------------------------------------
     world, dispatcher = hsrb_setup_world(environment=environment, robot=robot)
@@ -299,8 +299,10 @@ def main(locations: list[Any] = None):
     res = compare_robot_world_with_real(dispatcher, world, context)
     print(res)
 
+    dictionary = list_feasibility_of_each_task(dispatcher)
 
-    return res, dispatcher.perceived_objects, world.bodies, list_feasibility_of_each_task(dispatcher)
+
+    return res, dispatcher.perceived_objects, world.bodies, dictionary
 
 
 
@@ -317,4 +319,4 @@ if __name__ == "__main__":
         Pose(Point3(x=2.37098, y=6.53524, z=0.73), Quaternion(x=0, y=0, z=0, w=1)),
         Pose(Point3(x=2.10353, y=-1.20035, z=0.14), Quaternion(x=0, y=0, z=0, w=1)),
     ]
-    main(locations=locs)
+    main(HSRB, locations=locs)

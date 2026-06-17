@@ -245,10 +245,10 @@ def print_locs_as_copy_paste_list(locs : list[Pose]):
 
 def list_feasibility_of_each_task(dispatcher: EventDispatcher):
     dictio = {
-        "set_the_table: ": 0,
-        "clean_the_table: ": 0,
-        "load_the_dishwasher: ": 0,
-        "unload_the_dishwasher: ": 0,
+        "set_the_table": 0,
+        "clean_the_table": 0,
+        "load_the_dishwasher": 0,
+        "unload_the_dishwasher": 0,
         "put_away_object_task_bowl": 0,
         "put_away_object_task_spoon": 0,
         "put_away_object_task_Static_MilkPitcher": 0,
@@ -263,7 +263,6 @@ def list_feasibility_of_each_task(dispatcher: EventDispatcher):
     }
 
     for task in dispatcher.activated_tasks:
-
         if "set_table" in task.name:
             dictio["set_the_table"] = task.calculate_feasibility()
         elif "clean_table" in task.name:
@@ -292,5 +291,4 @@ def list_feasibility_of_each_task(dispatcher: EventDispatcher):
             dictio["put_away_object_task_knife"] = task.calculate_feasibility()
         elif "put_away_object_task_plate" in task.name:
             dictio["put_away_object_task_plate"] = task.calculate_feasibility()
-
-        return dictio
+    return dictio

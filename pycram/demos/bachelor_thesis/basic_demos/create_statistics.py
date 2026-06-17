@@ -9,6 +9,7 @@ import datetime
 from time import sleep, time as tm
 
 import move_and_perceive, move_and_perceive_pr2_apartment
+from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types import Pose, Point3, Quaternion
 from semantic_digital_twin.world_description.world_entity import Body, SemanticAnnotation
 
@@ -37,9 +38,11 @@ def main():
     stats = []
     objects_perceived = []
     objects_in_world = []
+    feasibility_dicts = []
 
     # CHANGE ITERATION COUNT HERE
-    iterations = 5
+    iterations = 1
+    robot = PR2
 
     for i in range(0, iterations):
         locs_suturo_lab = [
@@ -57,10 +60,11 @@ def main():
 
         # FOR COMPARABILITY BETWEEN HSRB AND PR2: set location list and set random_set_of_objects on false. Do one
         # statistic test with the HSRB and one with the PR2
-        percents, objs_perceived, objs_in_world = move_and_perceive.main()
+        percents, objs_perceived, objs_in_world, dictionary_feasibilities = move_and_perceive.main(robot, locations=locs_suturo_lab)
         stats.append(percents)
         objects_perceived.append(objs_perceived)
         objects_in_world.append(objs_in_world)
+        feasibility_dicts.append(dictionary_feasibilities)
 
         subprocess.run(["pkill", "-f", "rclpy"])
         sleep(3)
@@ -76,6 +80,11 @@ def main():
     print(dictionary)
     recognized_objects_barchart(dictionary, iterations)
     recognized_tasks_barchart(dictionary, iterations)
+    if robot == PR2:
+        str_robot = "pr2"
+    else:
+        str_robot = "hsrb"
+    save_feasibility_statistics(calculate_feasibility_average(feasibility_dicts), str_robot)
 
 def calculate_average_stats(percentage_list: list[list[Any]]):
     iteration_results = []
@@ -263,15 +272,238 @@ def calculate_obj_percentage(key: str, dictionary: dict[str, Any]):
         res = dictionary[key][0]/dictionary[key][1]
         return res
 
-def calculate_feasibility_average(percentage_list: list[Any]) -> float:
+def calculate_feasibility_average(feasibility_dicts: list[dict]) -> dict | None:
+    if feasibility_dicts is None:
+        return None
+
+    dictio = {
+        "set_the_table": 0,
+        "clean_the_table": 0,
+        "load_the_dishwasher": 0,
+        "unload_the_dishwasher": 0,
+        "put_away_object_task_bowl": 0,
+        "put_away_object_task_spoon": 0,
+        "put_away_object_task_Static_MilkPitcher": 0,
+        "put_away_object_task_Static_CokeBottle": 0,
+        "put_away_object_task_jeroen_cup": 0,
+        "put_away_object_task_dishwasher_tab": 0,
+        "put_away_object_task_banana": 0,
+        "put_away_object_task_bread": 0,
+        "put_away_object_task_knife": 0,
+        "put_away_object_task_plate": 0,
+
+    }
+
+    for dicti in feasibility_dicts:
+        dictio["set_the_table"] = dictio["set_the_table"] + dicti["set_the_table"]
+        dictio["clean_the_table"] = dictio["clean_the_table"] + dicti["clean_the_table"]
+        dictio["load_the_dishwasher"] = dictio["load_the_dishwasher"] + dicti["load_the_dishwasher"]
+        dictio["unload_the_dishwasher"] = dictio["unload_the_dishwasher"] + dicti["unload_the_dishwasher"]
+        dictio["put_away_object_task_bowl"] = dictio["put_away_object_task_bowl"] + dicti["put_away_object_task_bowl"]
+        dictio["put_away_object_task_spoon"] = dictio["put_away_object_task_spoon"] + dicti["put_away_object_task_spoon"]
+        dictio["put_away_object_task_Static_MilkPitcher"] = dictio["put_away_object_task_Static_MilkPitcher"] + dicti["put_away_object_task_Static_MilkPitcher"]
+        dictio["put_away_object_task_Static_CokeBottle"] = dictio["put_away_object_task_Static_CokeBottle"] + dicti["put_away_object_task_Static_CokeBottle"]
+        dictio["put_away_object_task_jeroen_cup"] = dictio["put_away_object_task_jeroen_cup"] + dicti["put_away_object_task_jeroen_cup"]
+        dictio["put_away_object_task_dishwasher_tab"] = dictio["put_away_object_task_dishwasher_tab"] + dicti["put_away_object_task_dishwasher_tab"]
+        dictio["put_away_object_task_banana"] = dictio["put_away_object_task_banana"] + dicti["put_away_object_task_banana"]
+        dictio["put_away_object_task_bread"] = dictio["put_away_object_task_bread"] + dicti["put_away_object_task_bread"]
+        dictio["put_away_object_task_knife"] = dictio["put_away_object_task_knife"] + dicti["put_away_object_task_knife"]
+        dictio["put_away_object_task_plate"] = dictio["put_away_object_task_plate"] + dicti["put_away_object_task_plate"]
+
+    dictio["set_the_table"] = dictio["set_the_table"] / len(feasibility_dicts)
+    dictio["clean_the_table"] = dictio["clean_the_table"] / len(feasibility_dicts)
+    dictio["load_the_dishwasher"] = dictio["load_the_dishwasher"] / len(feasibility_dicts)
+    dictio["unload_the_dishwasher"] = dictio["unload_the_dishwasher"] / len(feasibility_dicts)
+    dictio["put_away_object_task_bowl"] = dictio["put_away_object_task_bowl"] / len(feasibility_dicts)
+    dictio["put_away_object_task_spoon"] = dictio["put_away_object_task_spoon"] / len(feasibility_dicts)
+    dictio["put_away_object_task_Static_MilkPitcher"] = dictio["put_away_object_task_Static_MilkPitcher"]  / len(feasibility_dicts)
+    dictio["put_away_object_task_Static_CokeBottle"] = dictio["put_away_object_task_Static_CokeBottle"] / len(feasibility_dicts)
+    dictio["put_away_object_task_jeroen_cup"] = dictio["put_away_object_task_jeroen_cup"] / len(feasibility_dicts)
+    dictio["put_away_object_task_dishwasher_tab"] = dictio["put_away_object_task_dishwasher_tab"] / len(feasibility_dicts)
+    dictio["put_away_object_task_banana"] = dictio["put_away_object_task_banana"] / len(feasibility_dicts)
+    dictio["put_away_object_task_bread"] = dictio["put_away_object_task_bread"] / len(feasibility_dicts)
+    dictio["put_away_object_task_knife"] = dictio["put_away_object_task_knife"] / len(feasibility_dicts)
+    dictio["put_away_object_task_plate"] = dictio["put_away_object_task_plate"] / len(feasibility_dicts)
+
+    return dictio
 
 
-def create_diagram_for_feasibility_comparison(feasibility_hsrb: float, feasibility_pr2):
-    # TODO
-    pass
+def save_feasibility_statistics(dictionary: dict, robot: str):
+    ts = tm()
+
+    try:
+        with open(f"feasibility_stats/{robot}_{datetime.datetime.fromtimestamp(ts)}", "x", encoding="utf-8") as file:
+            file.write(f"set_the_table: {dictionary['set_the_table']}\n")
+            file.write(f"clean_the_table: {dictionary['clean_the_table']}\n")
+            file.write(f"load_the_dishwasher: {dictionary['load_the_dishwasher']}\n")
+            file.write(f"unload_the_dishwasher: {dictionary['unload_the_dishwasher']}\n")
+            file.write(f"put_away_object_task_bowl: {dictionary['put_away_object_task_bowl']}\n")
+            file.write(f"put_away_object_task_spoon: {dictionary['put_away_object_task_spoon']}\n")
+            file.write(f"put_away_object_task_Static_MilkPitcher: {dictionary['put_away_object_task_Static_MilkPitcher']}\n")
+            file.write(f"put_away_object_task_Static_CokeBottle: {dictionary['put_away_object_task_Static_CokeBottle']}\n")
+            file.write(f"put_away_object_task_jeroen_cup: {dictionary['put_away_object_task_jeroen_cup']}\n")
+            file.write(f"put_away_object_task_dishwasher_tab: {dictionary['put_away_object_task_dishwasher_tab']}\n")
+            file.write(f"put_away_object_task_banana: {dictionary['put_away_object_task_banana']}\n")
+            file.write(f"put_away_object_task_bread: {dictionary['put_away_object_task_bread']}\n")
+            file.write(f"put_away_object_task_knife: {dictionary['put_away_object_task_knife']}\n")
+            file.write(f"put_away_object_task_plate: {dictionary['put_away_object_task_plate']}\n")
 
 
+    except FileExistsError:
+        print("file.txt already exists, exclusive creation aborted.")
+
+
+
+
+
+
+
+## compare robots
+
+"""
+Usage:
+    python plot_robot_tasks.py --pr2 pr2_results.txt --hsrb hsrb_results.txt
+    python plot_robot_tasks.py --pr2 pr2_results.txt --hsrb hsrb_results.txt --output my_plot.png
+
+File format (one entry per line):
+    task_name: 0.6666666666666666
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+import numpy as np
+
+
+# ── File loader ───────────────────────────────────────────────────────────────
+
+def load_file(path: str) -> dict:
+    data = {}
+    with open(path) as f:
+        for lineno, line in enumerate(f, 1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if ": " not in line:
+                print(f"Warning: skipping malformed line {lineno} in {path!r}: {line!r}")
+                continue
+            key, _, val = line.partition(": ")
+            try:
+                data[key.strip()] = float(val.strip())
+            except ValueError:
+                print(f"Warning: could not parse value on line {lineno} in {path!r}: {val!r}")
+    return data
+
+
+# ── Label prettifier ──────────────────────────────────────────────────────────
+
+def pretty(name: str) -> str:
+    prefix = "put_away_object_task_"
+    if name.startswith(prefix):
+        name = "put away " + name[len(prefix):]
+    return name.replace("_", " ")
+
+
+# ── Plot ──────────────────────────────────────────────────────────────────────
+
+def plot(pr2_data: dict, hsrb_data: dict, output_path: str) -> None:
+    # Use all tasks that appear in either file, preserving PR2 order then any HSRB extras
+    task_names = list(pr2_data.keys())
+    for t in hsrb_data:
+        if t not in pr2_data:
+            task_names.append(t)
+
+    labels    = [pretty(t) for t in task_names]
+    pr2_vals  = [pr2_data.get(t,  0.0) for t in task_names]
+    hsrb_vals = [hsrb_data.get(t, 0.0) for t in task_names]
+
+    x     = np.arange(len(task_names))
+    width = 0.38
+    gap   = 0.04
+
+    fig, ax = plt.subplots(figsize=(16, 6))
+
+    bars_pr2  = ax.bar(x - width / 2 - gap / 2, pr2_vals,  width, label="PR2",  color="#4C72B0", zorder=3)
+    bars_hsrb = ax.bar(x + width / 2 + gap / 2, hsrb_vals, width, label="HSRB", color="#DD8452", zorder=3)
+
+    ax.set_ylabel("Success Rate", fontsize=12)
+    ax.set_title("Task Success Rate: PR2 vs HSRB", fontsize=14, fontweight="bold", pad=14)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=35, ha="right", fontsize=9)
+    ax.set_ylim(0, 1.12)
+    ax.yaxis.set_major_formatter(mticker.PercentFormatter(xmax=1.0))
+    ax.set_yticks(np.arange(0, 1.1, 0.1))
+    ax.yaxis.grid(True, linestyle="--", alpha=0.7, zorder=0)
+    ax.set_axisbelow(True)
+    ax.spines[["top", "right"]].set_visible(False)
+
+    def label_bars(bars):
+        for bar in bars:
+            h = bar.get_height()
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                h + 0.01,
+                f"{h:.0%}",
+                ha="center", va="bottom", fontsize=7.5, color="#333333",
+            )
+
+    label_bars(bars_pr2)
+    label_bars(bars_hsrb)
+
+    ax.legend(fontsize=11, framealpha=0.9)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    print(f"Plot saved to {output_path}")
+    plt.show()
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
+def compare():
+    parser = argparse.ArgumentParser(
+        description="Plot task success rates for PR2 and HSRB robots."
+    )
+    parser.add_argument("--pr2",    required=True, help="Path to PR2 results file")
+    parser.add_argument("--hsrb",   required=True, help="Path to HSRB results file")
+    parser.add_argument("--output", default="robot_task_comparison.png",
+                        help="Output image path (default: robot_task_comparison.png)")
+    args = parser.parse_args()
+
+    for path in (args.pr2, args.hsrb):
+        if not Path(path).is_file():
+            print(f"Error: file not found: {path!r}", file=sys.stderr)
+            sys.exit(1)
+
+    pr2_data  = load_file(args.pr2)
+    hsrb_data = load_file(args.hsrb)
+
+    if not pr2_data:
+        print(f"Error: no data loaded from PR2 file {args.pr2!r}", file=sys.stderr)
+        sys.exit(1)
+    if not hsrb_data:
+        print(f"Error: no data loaded from HSRB file {args.hsrb!r}", file=sys.stderr)
+        sys.exit(1)
+
+    plot(pr2_data, hsrb_data, args.output)
+
+def create_diagram_for_feasibility_comparison():
+    ts = tm()
+
+    directory = Path("/home/hanna/bachelor_ws/src/cognitive_robot_abstract_machine/pycram/demos/bachelor_thesis/basic_demos/feasibility_stats")
+
+    print(list(directory.glob("*")))
+
+    pr2_file = max(directory.glob("pr2_*"), key=lambda f: f.stat().st_mtime)
+    hsrb_file = max(directory.glob("hsrb_*"), key=lambda f: f.stat().st_mtime)
+
+    pr2_data = load_file(pr2_file.as_posix())
+    hsrb_data = load_file(hsrb_file.as_posix())
+    plot(pr2_data, hsrb_data, f"images/comparison/comparison_{datetime.datetime.fromtimestamp(ts)}.png")
 
 
 if __name__ == "__main__":
-    main()
+    #main()
+    create_diagram_for_feasibility_comparison()

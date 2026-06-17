@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from enum import Enum
 
 from docutils.nodes import reference
+from typing_extensions import Any
 
 from demos.bachelor_thesis.actions.random_location_generator import random_location_list, \
     pose_to_homogeneous_transformation_matrix_from_xyz_quaternion
@@ -34,15 +35,12 @@ from time import sleep
 
 from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import Environment, \
     timed_plan, timed_parse_stl, debug_task_list_for_demo, print_sorted_task_list, sort_tasks, \
-    compare_robot_world_with_real, print_object_locations
+    compare_robot_world_with_real, print_object_locations, print_locs_as_copy_paste_list
+
 
 # fixed frame in rviz: 'apartment/apartment_root'
-def main():
+def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None, random_set_of_objects: bool = True):
     environment = Environment.Pr2ApartmentLab
-    random_set_of_objects = True
-
-    # PR2 or HSRB
-    robot = PR2
 
     #------------------ standard setup -------------------------------------------------------------------------------------
     world, dispatcher = hsrb_setup_world(environment=environment, robot=robot)
@@ -121,7 +119,11 @@ def main():
     plate = timed_parse_stl("plate", "plate.stl")
     semantic_objects.append(plate)
 
-    locs = random_location_list(world, len(semantic_objects))
+    if locations is None:
+        locs = random_location_list(world, len(semantic_objects))
+        print_locs_as_copy_paste_list(locs)
+    else:
+        locs = locations
 
     with world.modify_world():
         for i in range(0, len(semantic_objects)):
@@ -272,4 +274,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    locats = [
+        Pose(Point3(x=1.80137, y=3.74752, z=0.14), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=0.441988, y=3.22805, z=0.9205), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=16.3231, y=2.86242, z=0.392059), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=16.0674, y=1.84087, z=0.46), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=2.5612, y=1.51565, z=0.951027), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=5.08668, y=4.48623, z=0.722643), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=2.21439, y=3.98385, z=0.14), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=0.16466, y=3.58551, z=0.9205), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=16.5754, y=2.61031, z=0.392059), Quaternion(x=0, y=0, z=0, w=1)),
+        Pose(Point3(x=1.89091, y=4.10946, z=0.14), Quaternion(x=0, y=0, z=0, w=1)),
+    ]
+    main(HSRB)

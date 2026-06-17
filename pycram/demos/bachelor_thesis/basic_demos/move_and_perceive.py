@@ -29,12 +29,8 @@ from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import
 
 
 # fixed frame in rviz: 'root'
-def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None):
+def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None, random_set_of_objects: bool = True):
     environment = Environment.SuturoApartmentLab
-    random_set_of_objects = False
-
-    # PR2 or HSRB
-    robot = PR2
 
     #------------------ standard setup -------------------------------------------------------------------------------------
     world, dispatcher = hsrb_setup_world(environment=environment, robot=robot)
@@ -124,20 +120,6 @@ def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None):
             except WorldEntityNotFoundError:
                 pass
 
-        # world.add_semantic_annotations(
-        #     [
-        #         Bowl(root=world.get_body_by_name("bowl.stl"), name=PrefixedName("bowl.stl")),
-        #         Spoon(root=world.get_body_by_name("spoon.stl"), name=PrefixedName("spoon.stl")),
-        #         Bottle(root=world.get_body_by_name("Static_MilkPitcher.stl"), name=PrefixedName("Static_MilkPitcher.stl")),
-        #         Bottle(root=world.get_body_by_name("Static_CokeBottle.stl"), name=PrefixedName("Static_CokeBottle.stl")),
-        #         Cup(root=world.get_body_by_name("jeroen_cup.stl"), name=PrefixedName("jeroen_cup.stl")),
-        #         DishwasherTab(root=world.get_body_by_name("dishwasher_tab.stl"), name=PrefixedName("dishwasher_tab.stl")),
-        #         Banana(root=world.get_body_by_name("banana.stl"), name=PrefixedName("banana.stl")),
-        #         Bread(root=world.get_body_by_name("bread.stl"), name=PrefixedName("bread.stl")),
-        #         Knife(root=world.get_body_by_name("knife.stl"), name=PrefixedName("knife.stl")),
-        #         Plate(root=world.get_body_by_name("plate.stl"), name=PrefixedName("plate.stl")),
-        #     ]
-        # )
 
         supporting_surfaces = []
         supporting_surfaces.append(world.get_semantic_annotation_by_name("shelf_1"))
@@ -149,9 +131,6 @@ def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None):
         supporting_surfaces.append(world.get_semantic_annotation_by_name("cooking_table"))
         supporting_surfaces.append(world.get_semantic_annotation_by_name("dining_table"))
         supporting_surfaces.append(world.get_semantic_annotation_by_name("dishwasher_rack"))
-
-
-
 
         for surface in supporting_surfaces:
             if isinstance(surface, HasSupportingSurface):
@@ -307,7 +286,7 @@ def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None):
 
 
 if __name__ == "__main__":
-    locs = [
+    locats = [
         Pose(Point3(x=4.34451, y=5.20153, z=0.52), Quaternion(x=0, y=0, z=0, w=1)),
         Pose(Point3(x=4.41704, y=5.70009, z=0.52), Quaternion(x=0, y=0, z=0, w=1)),
         Pose(Point3(x=3.14758, y=-1.88804, z=0.545), Quaternion(x=0, y=0, z=0, w=1)),
@@ -319,4 +298,4 @@ if __name__ == "__main__":
         Pose(Point3(x=2.37098, y=6.53524, z=0.73), Quaternion(x=0, y=0, z=0, w=1)),
         Pose(Point3(x=2.10353, y=-1.20035, z=0.14), Quaternion(x=0, y=0, z=0, w=1)),
     ]
-    main(HSRB, locations=locs)
+    main(HSRB, locations=locats)

@@ -37,7 +37,7 @@ from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import
     timed_plan, timed_parse_stl, debug_task_list_for_demo, print_sorted_task_list, sort_tasks, \
     compare_robot_world_with_real, print_object_locations, print_locs_as_copy_paste_list
 
-
+# fixed frame in rviz: 'world/world'
 def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None, random_set_of_objects: bool = True):
     environment = Environment.TestBed
 
@@ -49,8 +49,8 @@ def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None, random_set_
         dishwasher_rack = Table.create_with_new_body_in_world(
                         world=world,
                         name=PrefixedName("dishwasher_rack"),
-                        world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(x=2, y=1.42, z=0.07),
-                        scale=Scale(x=0.744, y=0.650, z=0.14)
+                        world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(x=2.1, y=1.05, z=0.07),
+                        scale=Scale(x=0.650, y=0.744, z=0.14)
                     )
         for color in dishwasher_rack.bodies[0].visual.shapes:
             color.color = Color.RED()

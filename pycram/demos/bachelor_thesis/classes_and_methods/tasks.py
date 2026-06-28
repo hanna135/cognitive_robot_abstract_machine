@@ -430,7 +430,6 @@ class LoadDishwasherTask(Task):
 
 
     def precondition(self):
-        # because required objects are the perceived objects
         preconditions = []
 
         # Dishwasher rack has to be empty with respect to already perceived objects.

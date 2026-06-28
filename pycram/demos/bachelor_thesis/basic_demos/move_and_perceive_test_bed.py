@@ -246,7 +246,7 @@ def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None, random_set_
                                  reference_frame=world.root), keep_joint_states=True), context),
 
         timed_plan("move to dishwasher", NavigateAction(
-            target_location=Pose(Point3(1.1154820, 0.96872162, 0), orientation=(Quaternion(z=0.13903434, w=0.99028756005)),
+            target_location=Pose(Point3(-0.1024299, 0.7348015, 0), orientation=(Quaternion(z=0.0801799782, w=0.996780402)),
                                  reference_frame=world.root), keep_joint_states=True), context),
 
         # transition point to not drive through counter
@@ -266,7 +266,7 @@ def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None, random_set_
 
         # transition point to not drive in wall
         timed_plan("move to other table", NavigateAction(
-            target_location=Pose(Point3(-1.93026709, -2.5748128, 0), orientation=(Quaternion(z=0.9998065, w=0.019670357)),
+            target_location=Pose(Point3(-1.4124650, -2.5534832, 0), orientation=(Quaternion(z=0.99995661, w=0.009314871)),
                                  reference_frame=world.root), keep_joint_states=True), context),
 
         # sofa table
@@ -335,4 +335,4 @@ if __name__ == "__main__":
         Pose(Point3(x=-0.596321, y=4.99409, z=0.554529), Quaternion(x=0, y=0, z=0, w=1)),
     ]
 
-    main(HSRB)
+    main(PR2)

@@ -9,12 +9,16 @@ import datetime
 from time import sleep, time as tm
 
 import move_and_perceive, move_and_perceive_pr2_apartment
+from demos.bachelor_thesis.basic_demos import move_and_perceive_test_bed
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types import Pose, Point3, Quaternion
 from semantic_digital_twin.world_description.world_entity import Body, SemanticAnnotation
 
+from semantic_digital_twin.robots.hsrb import HSRB
+
+
 # TODO: add other environments
-def main():
+def main(robot : type[PR2] | type[HSRB]):
     dictionary = {
         "correctly recognized": 0,
         "partially recognized": 0,
@@ -41,10 +45,12 @@ def main():
     feasibility_dicts = []
 
     # CHANGE ITERATION COUNT HERE
-    iterations = 1
-    robot = PR2
+    iterations = 50
+    #robot = PR2
 
     for i in range(0, iterations):
+        print(f"§§§§§§§§ Starting iteration: {i} §§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§§")
+
         locs_suturo_lab = [
             Pose(Point3(x=4.34451, y=5.20153, z=0.52), Quaternion(x=0, y=0, z=0, w=1)),
             Pose(Point3(x=4.41704, y=5.70009, z=0.52), Quaternion(x=0, y=0, z=0, w=1)),
@@ -60,7 +66,7 @@ def main():
 
         # FOR COMPARABILITY BETWEEN HSRB AND PR2: set location list and set random_set_of_objects on false. Do one
         # statistic test with the HSRB and one with the PR2
-        percents, objs_perceived, objs_in_world, dictionary_feasibilities = move_and_perceive.main(robot, locations=locs_suturo_lab)
+        percents, objs_perceived, objs_in_world, dictionary_feasibilities = move_and_perceive_test_bed.main(robot, locations=None, random_set_of_objects=True)
         stats.append(percents)
         objects_perceived.append(objs_perceived)
         objects_in_world.append(objs_in_world)
@@ -505,5 +511,6 @@ def create_diagram_for_feasibility_comparison():
 
 
 if __name__ == "__main__":
-    #main()
-    create_diagram_for_feasibility_comparison()
+    main(robot=HSRB)
+    main(robot=PR2)
+    #create_diagram_for_feasibility_comparison()

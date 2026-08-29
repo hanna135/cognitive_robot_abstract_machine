@@ -10,7 +10,7 @@ from semantic_digital_twin.spatial_types import Point3, Quaternion
 from semantic_digital_twin.spatial_types.spatial_types import Pose, HomogeneousTransformationMatrix
 from semantic_digital_twin.robots.hsrb import HSRB
 from pycram.datastructures.dataclasses import Context
-from demos.bachelor_thesis.hsrb_setup_world import hsrb_setup_world
+from tarec.cram_interfaces.hsrb_setup_world import hsrb_setup_world
 
 
 
@@ -19,12 +19,12 @@ world = hsrb_setup_world()[0]
 
 spoon = STLParser(
     os.path.join(
-        os.path.dirname(__file__), "../..", "..", "resources", "objects", "spoon.stl"
+        os.path.dirname(__file__), "../../pycram/demos", "..", "resources", "objects", "spoon.stl"
     )
 ).parse()
 bowl = STLParser(
     os.path.join(
-        os.path.dirname(__file__), "../..", "..", "resources", "objects", "bowl.stl"
+        os.path.dirname(__file__), "../../pycram/demos", "..", "resources", "objects", "bowl.stl"
     )
 ).parse()
 

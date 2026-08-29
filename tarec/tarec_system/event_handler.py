@@ -1,9 +1,6 @@
 # source for base: https://medium.com/@idelossantosruiz/events-in-python-e2b3cb76ac2d
-from contextlib import contextmanager
 
-from rdflib.plugins.sparql.parser import PrefixedName
-
-from demos.bachelor_thesis.classes_and_methods.tasks import SetTableTask, CleanTableTask, PutAwayObjectTask, \
+from tarec.tarec_system.tasks import SetTableTask, CleanTableTask, PutAwayObjectTask, \
     LoadDishwasherTask, UnloadDishwasherTask
 from pycram.datastructures.dataclasses import Context
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
@@ -12,15 +9,14 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl
 from semantic_digital_twin.spatial_types import Point3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body, SemanticAnnotation
-from demos.bachelor_thesis.actions.predicate_mock import (
+from tarec.cram_interfaces.predicate_mock import (
     reachable,
     misplaced,
     human_near,
-    semantic_annotations_on_surface_cached,
     is_supported_by_surface_cached, is_empty,
 )
 import datetime
-from time import sleep, time as tm
+from time import time as tm
 
 
 class EventDispatcher:

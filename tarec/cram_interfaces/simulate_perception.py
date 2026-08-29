@@ -1,61 +1,23 @@
-import os
-from contextlib import contextmanager
+from tarec.cram_interfaces.hsrb_setup_world import hsrb_setup_world
+from tarec.tarec_system.event_handler import EventDispatcher
 
-from mpmath.math2 import sqrt2
-
-from demos.bachelor_thesis.hsrb_setup_world import hsrb_setup_world
-from demos.bachelor_thesis.events.event_handler import EventDispatcher, update_perceived_objects
-from pycram.locations.costmaps import VisibilityCostmap
-from rclpy.node import Node
-
-from pycram.motion_executor import simulated_robot
-from pycram.plans.factories import sequential, execute_single
-from pycram.robot_plans.actions.core.navigation import NavigateAction
-from semantic_digital_twin.adapters.mesh import STLParser
-from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.robots.hsrb import HSRB
-from semantic_digital_twin.spatial_types.spatial_types import Pose, Point3, Quaternion, HomogeneousTransformationMatrix
-from semantic_digital_twin.world import World
-
-
 
 import os
-import threading
 import time
 import numpy as np
 
 from pycram.datastructures.dataclasses import Context
-from pycram.datastructures.enums import Arms
 from pycram.locations.costmaps import VisibilityCostmap
 from pycram.robot_plans.actions.composite.utils.rviz import CameraVisiblePointsRviz
-from pycram.motion_executor import simulated_robot
-from pycram.plans.factories import sequential
-from pycram.robot_plans.actions.composite.transporting import TransportAction
-from pycram.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction
 from pycram.tf_transformations import quaternion_multiply
 from pycram.utils import get_quaternion_between_two_vectors
 
-from pycram.testing import setup_world
-from semantic_digital_twin.adapters.mesh import STLParser
-from semantic_digital_twin.adapters.ros.tf_publisher import TFPublisher
 from semantic_digital_twin.spatial_computations.raytracer import RayTracer
-from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
-from semantic_digital_twin.robots.pr2 import PR2
-from semantic_digital_twin.semantic_annotations.semantic_annotations import (
-    Bowl,
-    Spoon,
-    Drawer,
-    Handle,
-)
-from semantic_digital_twin.spatial_types import (
-    HomogeneousTransformationMatrix,
-)
 from semantic_digital_twin.spatial_types.spatial_types import Pose, Point3, Quaternion
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.connections import FixedConnection
-
 
 RVIZ_PUBLISH_WAIT_SECONDS = float(os.environ.get("MOVE_AND_PERCEIVE_RVIZ_WAIT", "0.2"))
 REASON_WORLD_EACH_PERCEPTION = os.environ.get("MOVE_AND_PERCEIVE_REASON_EACH", "0") != "0"

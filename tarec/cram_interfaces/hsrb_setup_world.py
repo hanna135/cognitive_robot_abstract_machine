@@ -3,24 +3,20 @@ import os
 from typing import Tuple
 
 import rclpy
-from ament_index_python import get_package_share_directory
 
-from semantic_digital_twin.adapters.mesh import STLParser
-from semantic_digital_twin.adapters.package_resolver import CompositePathResolver, FileUriResolver, PackageUriResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types.spatial_types import (
     HomogeneousTransformationMatrix,
-    Pose,
 )
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import OmniDrive
 from semantic_digital_twin.predetermined_maps.kitchen_environment import KitchenEnvironment
 
-from demos.bachelor_thesis.events.event_handler import EventDispatcher, update_perceived_objects
-from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import Environment
+from tarec.tarec_system.event_handler import EventDispatcher
+from tarec.cram_interfaces.helper_classes_and_methods import Environment
 from semantic_digital_twin.world_description.world_entity import Body
 
 logger = logging.getLogger(__name__)
@@ -79,7 +75,7 @@ def hsrb_setup_world(environment: Environment, robot: type[PR2] | type[HSRB]) ->
         apartment_world = URDFParser.from_file(
             os.path.join(
                 os.path.dirname(__file__),
-                "own_environments",
+                "../basic_demos/own_environments",
                 "modified_apartment.urdf",
             )
         ).parse()
@@ -88,7 +84,7 @@ def hsrb_setup_world(environment: Environment, robot: type[PR2] | type[HSRB]) ->
         apartment_world = URDFParser.from_file(
             os.path.join(
                 os.path.dirname(__file__),
-                "..",
+                "../../pycram/demos",
                 "..",
                 "resources",
                 "worlds",

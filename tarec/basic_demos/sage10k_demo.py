@@ -1,18 +1,16 @@
 import rclpy
 
-from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import create_annotations_for_bodies_sage10k
-from demos.bachelor_thesis.events.event_handler import EventDispatcher
+from tarec.cram_interfaces.helper_classes_and_methods import create_annotations_for_bodies_sage10k
+from tarec.tarec_system.event_handler import EventDispatcher
 from pycram.datastructures.dataclasses import Context
 from pycram.datastructures.enums import Arms
 from pycram.locations.locations import CostmapLocation
 from pycram.motion_executor import simulated_robot
-from pycram.plans.factories import sequential, execute_single
-from pycram.plans.failures import BodyUnfetchable
+from pycram.plans.factories import execute_single
 from pycram.robot_plans.actions.core.navigation import NavigateAction
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import VizMarkerPublisher
 from semantic_digital_twin.adapters.sage_10k_dataset.loader import Sage10kDatasetLoader
 
-from time import sleep
 import threading
 
 from semantic_digital_twin.adapters.urdf import URDFParser
@@ -22,7 +20,6 @@ from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurfa
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Table, Dishwasher
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.world_description.connections import OmniDrive
-from semantic_digital_twin.world_description.world_entity import SemanticAnnotation
 
 #-- WORLD SETUP --------------------------------------------------------------------------------------------------------
 

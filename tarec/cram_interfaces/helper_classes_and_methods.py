@@ -1,18 +1,15 @@
 import os
-from contextlib import contextmanager
 from enum import Enum
 
-from docutils.parsers.rst.directives import percentage
 from typing_extensions import List
 
-from demos.bachelor_thesis.classes_and_methods.tasks import Task
-from demos.bachelor_thesis.events.event_handler import EventDispatcher, print_perceived_objects
+from tarec.tarec_system.tasks import Task
+from tarec.tarec_system.event_handler import EventDispatcher
 from pycram.datastructures.dataclasses import Context
 from pycram.plans.factories import execute_single
 from pycram.plans.plan import Plan
 from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
-from semantic_digital_twin.reasoning.predicates import reachable
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface
 from semantic_digital_twin.semantic_annotations.semantic_annotations import Table, SideTable, Wardrobe, \
     Sofa, Cup, ShelfLayer
@@ -94,7 +91,7 @@ def sorted_inserting(sorted_list: List[Task], elem: Task) -> List[Task]:
 def timed_parse_stl(label: str, filename: str) -> World:
     return STLParser(
         os.path.join(
-            os.path.dirname(__file__), "../..", "..", "resources", "objects", filename
+            os.path.dirname(__file__), "../../pycram/demos", "..", "resources", "objects", filename
         )
     ).parse()
 

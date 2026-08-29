@@ -1,15 +1,10 @@
 import subprocess
-from time import sleep
 from typing import Any
-
-import matplotlib.pyplot as plt
-import numpy as np
 
 import datetime
 from time import sleep, time as tm
 
-import move_and_perceive, move_and_perceive_pr2_apartment
-from demos.bachelor_thesis.basic_demos import move_and_perceive_test_bed
+from tarec.basic_demos import move_and_perceive_test_bed
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.spatial_types import Pose, Point3, Quaternion
 from semantic_digital_twin.world_description.world_entity import Body, SemanticAnnotation
@@ -498,7 +493,7 @@ def compare():
 def create_diagram_for_feasibility_comparison():
     ts = tm()
 
-    directory = Path("/home/hanna/bachelor_ws/src/cognitive_robot_abstract_machine/pycram/demos/bachelor_thesis/basic_demos/feasibility_stats")
+    directory = Path("/bachelor_thesis/basic_demos/feasibility_stats")
 
     print(list(directory.glob("*")))
 

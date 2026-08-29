@@ -1,39 +1,30 @@
-import os
 import random
-from contextlib import contextmanager
-from enum import Enum
 
-from docutils.nodes import reference
 from typing_extensions import Any
 
-from demos.bachelor_thesis.actions.random_location_generator import random_location_list, \
+from tarec.cram_interfaces.random_location_generator import random_location_list, \
     pose_to_homogeneous_transformation_matrix_from_xyz_quaternion
-from demos.bachelor_thesis.actions.simulate_perception import simulate_perception
-from demos.bachelor_thesis.events.event_handler import EventDispatcher
-from pycram import plans
+from tarec.cram_interfaces.simulate_perception import simulate_perception
 from pycram.datastructures.enums import Arms
 from pycram.motion_executor import simulated_robot
-from pycram.plans.factories import sequential, execute_single
 from pycram.robot_plans.actions.core.navigation import NavigateAction
 from pycram.robot_plans.actions.core.robot_body import ParkArmsAction, MoveTorsoAction, ParkArmsWithHighTorsoAction
-from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.datastructures.definitions import TorsoState
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.exceptions import WorldEntityNotFoundError
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
 from semantic_digital_twin.robots.pr2 import PR2
-from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface, HasRootBody
+from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface
 from semantic_digital_twin.world_description.geometry import Color, Scale
-from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Spoon, Bottle, Cup, ShelfLayer, \
-    CounterTop, Table, Wardrobe, Cabinet, Oven, DishwasherTab, Banana, Bread, Knife, Plate, Milk
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Spoon, Bottle, Cup, CounterTop, Table, \
+    DishwasherTab, Banana, Bread, Knife, Plate, Milk
 from semantic_digital_twin.spatial_types import Point3, Quaternion
 from semantic_digital_twin.spatial_types.spatial_types import Pose, HomogeneousTransformationMatrix
 from semantic_digital_twin.robots.hsrb import HSRB
 from pycram.datastructures.dataclasses import Context
-from demos.bachelor_thesis.hsrb_setup_world import hsrb_setup_world
-from time import sleep
+from tarec.cram_interfaces.hsrb_setup_world import hsrb_setup_world
 
-from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import Environment, \
+from tarec.cram_interfaces.helper_classes_and_methods import Environment, \
     timed_plan, timed_parse_stl, debug_task_list_for_demo, print_sorted_task_list, sort_tasks, \
     compare_robot_world_with_real, print_object_locations, print_locs_as_copy_paste_list
 

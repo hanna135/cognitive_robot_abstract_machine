@@ -1,9 +1,7 @@
 from abc import ABC, abstractmethod
 from typing_extensions import Any
-from contextlib import contextmanager
 
-
-from demos.bachelor_thesis.actions.predicate_mock import (
+from tarec.cram_interfaces.predicate_mock import (
     is_empty,
     semantic_annotations_on_surface_cached,
     is_supported_by_surface_cached,

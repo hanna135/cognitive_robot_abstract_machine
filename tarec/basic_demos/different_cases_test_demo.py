@@ -1,38 +1,25 @@
 import os
 
-import rustworkx
-
-from demos.bachelor_thesis.actions.predicate_mock import misplaced
-from demos.bachelor_thesis.actions.random_location_generator import random_location_list, \
+from tarec.cram_interfaces.random_location_generator import random_location_list, \
     pose_to_homogeneous_transformation_matrix_from_xyz_quaternion
-from demos.bachelor_thesis.classes_and_methods.tasks import PutAwayObjectTask, SetTableTask, CleanTableTask
-from krrood.entity_query_language.factories import underspecified, variable
-from pycram import plans
-from pycram.datastructures.enums import Arms, ApproachDirection, VerticalAlignment
-from pycram.datastructures.grasp import GraspDescription
+from pycram.datastructures.enums import Arms
 from pycram.locations.locations import CostmapLocation
 from pycram.motion_executor import simulated_robot
 from pycram.plans.factories import sequential, execute_single
-from pycram.robot_plans.actions.core.misc import MoveToReach
 from pycram.robot_plans.actions.core.navigation import NavigateAction
 from pycram.robot_plans.actions.core.robot_body import ParkArmsAction
 from semantic_digital_twin.adapters.ros.visualization.viz_marker import CostmapHeatmapRviz
 from semantic_digital_twin.adapters.mesh import STLParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
-from semantic_digital_twin.exceptions import PointOccupiedError
 from semantic_digital_twin.reasoning.world_reasoner import WorldReasoner
-from semantic_digital_twin.robots.robot_parts import EndEffector
 from semantic_digital_twin.semantic_annotations.mixins import HasSupportingSurface
-from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Spoon, Bottle, Cup, ShelfLayer, \
-    CounterTop
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Bowl, Spoon, Bottle, Cup
 from semantic_digital_twin.spatial_types import Point3, Quaternion
-from semantic_digital_twin.spatial_types.spatial_types import Pose, HomogeneousTransformationMatrix, Pose2D
+from semantic_digital_twin.spatial_types.spatial_types import Pose
 from semantic_digital_twin.robots.hsrb import HSRB
 from pycram.datastructures.dataclasses import Context
-from demos.bachelor_thesis.hsrb_setup_world import hsrb_setup_world
-from demos.bachelor_thesis.classes_and_methods.helper_classes_and_methods import Environment
-from semantic_digital_twin.world_description.graph_of_convex_sets import navigation_map_at_target, \
-    translate_free_space_to_where_condition
+from tarec.cram_interfaces.hsrb_setup_world import hsrb_setup_world
+from tarec.cram_interfaces.helper_classes_and_methods import Environment
 
 #------------------ standard setup -------------------------------------------------------------------------------------
 world, dispatcher = hsrb_setup_world(Environment.SuturoApartmentLab, robot=HSRB)
@@ -41,31 +28,31 @@ world, dispatcher = hsrb_setup_world(Environment.SuturoApartmentLab, robot=HSRB)
 
 bowl = STLParser(
     os.path.join(
-        os.path.dirname(__file__), "../..", "..", "resources", "objects", "bowl.stl"
+        os.path.dirname(__file__), "../../pycram/demos", "..", "resources", "objects", "bowl.stl"
     )
 ).parse()
 
 spoon = STLParser(
     os.path.join(
-        os.path.dirname(__file__), "../..", "..", "resources", "objects", "spoon.stl"
+        os.path.dirname(__file__), "../../pycram/demos", "..", "resources", "objects", "spoon.stl"
     )
 ).parse()
 
 pitcher = STLParser(
 os.path.join(
-        os.path.dirname(__file__), "../..", "..", "resources", "objects", "Static_MilkPitcher.stl"
+        os.path.dirname(__file__), "../../pycram/demos", "..", "resources", "objects", "Static_MilkPitcher.stl"
     )
 ).parse()
 
 coke = STLParser(
 os.path.join(
-        os.path.dirname(__file__), "../..", "..", "resources", "objects", "Static_CokeBottle.stl"
+        os.path.dirname(__file__), "../../pycram/demos", "..", "resources", "objects", "Static_CokeBottle.stl"
     )
 ).parse()
 
 jeroen_cup = STLParser(
 os.path.join(
-        os.path.dirname(__file__), "../..", "..", "resources", "objects", "jeroen_cup.stl"
+        os.path.dirname(__file__), "../../pycram/demos", "..", "resources", "objects", "jeroen_cup.stl"
     )
 ).parse()
 

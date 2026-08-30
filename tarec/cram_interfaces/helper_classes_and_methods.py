@@ -3,6 +3,7 @@ from enum import Enum
 
 from typing_extensions import List
 
+from tarec.tarec_system.system_defined_values import TaRecValues
 from tarec.tarec_system.tasks import Task
 from tarec.tarec_system.event_handler import EventDispatcher
 from pycram.datastructures.dataclasses import Context
@@ -16,6 +17,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import Tabl
 from semantic_digital_twin.spatial_types import Pose
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
+from tarec.tarec_system.world_state import WorldState
 
 
 class Environment(Enum):
@@ -99,10 +101,10 @@ def timed_parse_stl(label: str, filename: str) -> World:
 def timed_plan(label: str, action, context: Context) -> Plan | None:
     return execute_single(action, context).plan
 
-def debug_task_list_for_demo(dispatcher: EventDispatcher) -> None:
+def debug_task_list_for_demo(world_state: WorldState) -> None:
     print("\n \n", "DEBUG")
 
-    for task in dispatcher.activated_tasks:
+    for task in world_state.activated_tasks:
         print("." * 110)
         print(task.name)
         print(task.required_objects)
@@ -146,29 +148,45 @@ def body_name_contains_keyword(body: Body, keyword: str) -> bool:
     return False
 
 
-def compare_robot_world_with_real(dispatcher: EventDispatcher, world: World, context: Context) -> list[list[float | None]]:
+def compare_robot_world_with_real(tarec_values: TaRecValues, world_state : WorldState, world: World, context: Context) -> list[list[float | None]]:
+    print("DEBUG 1")
+    real_world_world_state = WorldState()
+    print("DEBUG 2")
     real_world_dispatcher = EventDispatcher()
-    real_world_dispatcher.correct_location_tableware_clean = dispatcher.correct_location_tableware_clean
-    real_world_dispatcher.correct_location_tableware_dirty = dispatcher.correct_location_tableware_dirty
-    real_world_dispatcher.correct_location_food = dispatcher.correct_location_food
-    real_world_dispatcher.correct_location_drinks = dispatcher.correct_location_drinks
-    real_world_dispatcher.correct_location_all_other_items = dispatcher.correct_location_all_other_items
+    print("DEBUG 3")
+    real_world_dispatcher.tarec_values = tarec_values
+    print("DEBUG 4")
+    real_world_dispatcher.world_state = real_world_world_state
+    # real_world_dispatcher.correct_location_tableware_clean = dispatcher.correct_location_tableware_clean
+    # real_world_dispatcher.correct_location_tableware_dirty = dispatcher.correct_location_tableware_dirty
+    # real_world_dispatcher.correct_location_food = dispatcher.correct_location_food
+    # real_world_dispatcher.correct_location_drinks = dispatcher.correct_location_drinks
+    # real_world_dispatcher.correct_location_all_other_items = dispatcher.correct_location_all_other_items
 
-    real_world_dispatcher.dining_table = dispatcher.dining_table
-    real_world_dispatcher.dishwasher_exists = dispatcher.dishwasher_exists
-
-    real_world_dispatcher.known_furniture = dispatcher.known_furniture
+    # real_world_dispatcher.dining_table = dispatcher.dining_table
+    print("DEBUG 5")
+    real_world_world_state.dishwasher_exists = world_state.dishwasher_exists
+    #
+    # real_world_dispatcher.known_furniture = dispatcher.known_furniture
 
     # dispatcher gets all semantically annotated objects in the world -> same case as if robot has found all objects
-    real_world_dispatcher.perceived_objects = dispatcher.perceived_objects.copy()
-    real_world_dispatcher.misplaced_objects = dispatcher.misplaced_objects.copy()
-    real_world_dispatcher.reachable_objects = dispatcher.reachable_objects.copy()
+    print("DEBUG 6")
+    real_world_world_state.perceived_objects = world_state.perceived_objects.copy()
+    print("DEBUG 7")
+    real_world_world_state.misplaced_objects = world_state.misplaced_objects.copy()
+    print("DEBUG 8")
+    real_world_world_state.reachable_objects = world_state.reachable_objects.copy()
+    print("DEBUG 9")
+    real_world_world_state.known_furniture = world_state.known_furniture.copy()
+    #real_world_world_state.activated_tasks = world_state.activated_tasks.copy()
+    print("DEBUG 10")
     real_world_dispatcher.trigger_event(world.bodies, world, context=context)
 
-    result = _print_task_comparison_robot_real(dispatcher, real_world_dispatcher)
+    print("DEBUG 11")
+    result = _print_task_comparison_robot_real(world_state, real_world_world_state)
     return result
 
-def _print_task_comparison_robot_real(handler_robot : EventDispatcher, handler_world : EventDispatcher) \
+def _print_task_comparison_robot_real(world_state_robot : WorldState, world_state_real : WorldState) \
         -> list[list[float | None]]:
     print("\n \n")
     print("COMPARE ROBOT WORLD VS REAL WORLD")
@@ -180,10 +198,10 @@ def _print_task_comparison_robot_real(handler_robot : EventDispatcher, handler_w
 
     eval_array = []
 
-    for task in handler_world.activated_tasks:
+    for task in world_state_real.activated_tasks:
         # find task in robot handler
         robot_task = None
-        for elem in handler_robot.activated_tasks:
+        for elem in world_state_robot.activated_tasks:
             if elem.name == task.name:
                 robot_task = elem
 
@@ -227,10 +245,10 @@ def _print_task_comparison_robot_real(handler_robot : EventDispatcher, handler_w
     return eval_array
 
 
-def print_object_locations(dispatcher: EventDispatcher, world: World) -> None:
+def print_object_locations(world_state: WorldState, world: World) -> None:
     print("#"*110)
     for body in world.bodies:
-        if body not in dispatcher.known_furniture:
+        if body not in world_state.known_furniture:
             print(f"{body.name} at location ({body.global_pose.x}, {body.global_pose.y}, {body.global_pose.z})")
     print("#"*110)
 
@@ -240,7 +258,7 @@ def print_locs_as_copy_paste_list(locs : list[Pose]):
         print(f"    Pose(Point3(x={loc.x}, y={loc.y}, z={loc.z}), Quaternion(x={loc.to_quaternion().x}, y={loc.to_quaternion().y}, z={loc.to_quaternion().z}, w={loc.to_quaternion().w})),")
     print("]")
 
-def list_feasibility_of_each_task(dispatcher: EventDispatcher):
+def list_feasibility_of_each_task(world_state: WorldState):
     dictio = {
         "set_the_table": 0,
         "clean_the_table": 0,
@@ -259,7 +277,7 @@ def list_feasibility_of_each_task(dispatcher: EventDispatcher):
 
     }
 
-    for task in dispatcher.activated_tasks:
+    for task in world_state.activated_tasks:
         if "set_table" in task.name:
             dictio["set_the_table"] = task.calculate_feasibility()
         elif "clean_table" in task.name:

@@ -25,6 +25,8 @@ import random
 from tarec.cram_interfaces.helper_classes_and_methods import Environment, \
     timed_plan, timed_parse_stl, debug_task_list_for_demo, print_sorted_task_list, sort_tasks, \
     compare_robot_world_with_real, print_locs_as_copy_paste_list, list_feasibility_of_each_task
+from tarec.tarec_system.system_defined_values import TaRecValues
+from tarec.tarec_system.world_state import WorldState
 
 
 # fixed frame in rviz: 'root'
@@ -34,17 +36,26 @@ def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None, random_set_
     #------------------ standard setup -------------------------------------------------------------------------------------
     world, dispatcher = hsrb_setup_world(environment=environment, robot=robot)
 
-    dispatcher.known_furniture = world.bodies
+    tarec_values = TaRecValues(
+        world=world,
+        correct_location_tableware_clean = "shelf_2",
+        correct_location_tableware_dirty = "counterTop",
+        correct_location_food = "table",
+        correct_location_drinks = "desk",
+        correct_location_all_other_items = "shelf_1",
+        dining_table = "dining_table",
+        environment_boundaries=[]
+    )
+
+    world_state = WorldState()
+    world_state.known_furniture = world.bodies
+
+    dispatcher.tarec_values = tarec_values
+    dispatcher.world_state = world_state
 
 
     #-----------------------------------------------------------------------------------------------------------------------
-    dispatcher.correct_location_tableware_clean = world.get_semantic_annotation_by_name("shelf_2")
-    dispatcher.correct_location_tableware_dirty = world.get_semantic_annotation_by_name("counterTop")
-    dispatcher.correct_location_food = world.get_semantic_annotation_by_name("table")
-    dispatcher.correct_location_drinks = world.get_semantic_annotation_by_name("desk")
-    dispatcher.correct_location_all_other_items = world.get_semantic_annotation_by_name("shelf_1")
 
-    dispatcher.dining_table = world.get_semantic_annotation_by_name("dining_table")
 
 
     #-----------------------------------------------------------------------------------------------------------------------
@@ -269,18 +280,18 @@ def main(robot: type[PR2] | type[HSRB], locations: list[Any] = None, random_set_
                     hsrb,
                 )
             visible_count = len(visible_bodies) if visible_bodies is not None else 0
-        debug_task_list_for_demo(dispatcher)
+        debug_task_list_for_demo(world_state)
 
 
-    print_sorted_task_list(sort_tasks(dispatcher.activated_tasks, 300), 300)
+    print_sorted_task_list(sort_tasks(world_state.activated_tasks, 300), 300)
 
-    res = compare_robot_world_with_real(dispatcher, world, context)
+    res = compare_robot_world_with_real(tarec_values, world_state, world, context)
     print(res)
 
-    dictionary = list_feasibility_of_each_task(dispatcher)
+    dictionary = list_feasibility_of_each_task(world_state)
 
 
-    return res, dispatcher.perceived_objects, world.bodies, dictionary
+    return res, world_state.perceived_objects, world.bodies, dictionary
 
 
 

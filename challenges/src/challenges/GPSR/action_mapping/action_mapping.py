@@ -9,7 +9,7 @@ from typing_extensions import Any, Self
 
 from challenges.GPSR.action_mapping.exceptions import MissingMessage
 from challenges.semdt_helper_functions.find_class_by_name import SemanticAnnotationClassFinder
-from coraplex.demos.coraplex_real_tracy.demo import world
+
 
 from coraplex.locations.locations import ReachabilityLocation
 from coraplex.plans.context_extensions import RobotAccess, StatementGrounding
@@ -22,6 +22,7 @@ from cramph.context import StatechartContext
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.spatial_types import Pose, Point3
 from semantic_digital_twin.world import World
+from semantic_digital_twin.world_description.world_entity import SemanticAnnotation
 
 
 # %% Payload vocabulary
@@ -92,12 +93,12 @@ class PlannedAction:
     What the robot says, for :attr:`ActionType.SAY`.
     """
 
-    location: str | None = None
+    location: SemanticAnnotation | None = None
     """
     The named place the step goes to, places at or opens.
     """
 
-    object_name: str | None = None
+    object_annotation: str | None = None
     """
     The name of the object the step picks up or places.
     """
@@ -107,17 +108,19 @@ class PlannedAction:
     The description of the person the step looks for.
     """
 
-    world: World | None = None
-
     @classmethod
-    def from_json(cls, data: dict[str, str]) -> Self:
+    def from_json(cls, data: dict[str, str], world: World) -> Self:
         """
         :param data: One action of a generated plan.
+        :param world: The world the action is carried out in.
         :return: The action it describes.
         """
         action = None
         semdt_finder = SemanticAnnotationClassFinder()
-        location = semdt_finder.find(data.get(PayloadKey.LOCATION))
+        if data.get(PayloadKey.LOCATION) is not None:
+            location = semdt_finder.find(data.get(PayloadKey.LOCATION))
+        else:
+            location = None
 
         #-- LOCATION ---------------------------------------------------------------------------------------------------
         location_coordinates = None
@@ -128,10 +131,12 @@ class PlannedAction:
         #-- OBJECT -----------------------------------------------------------------------------------------------------
         searched_object = None
         try:
-            if location is not None:
+            if location is not None and data.get(PayloadKey.OBJECT) is not None:
                 #searched_object = find_objects_in_room(semdt_finder.find(data.get(PayloadKey.OBJECT)), location, world)[0]     # missing on this branch yet
-                pass #placeholder
-            else:
+                searched_object = world.get_semantic_annotation_by_name(
+                    data.get(PayloadKey.OBJECT)
+                ) #placeholder
+            elif data.get(PayloadKey.OBJECT) is not None:
                 searched_object = world.get_semantic_annotation_by_name(data.get(PayloadKey.OBJECT))
                 # location = find_objects_room(searched_object)     # missing on this branch yet
 
@@ -147,20 +152,25 @@ class PlannedAction:
                     raise Exception("Can't navigate if no location was given.")
                 action = NavigateAction(target_location=location_coordinates)
             case ActionType.PICK_UP:
-                robot = world.get_semantic_annotations_by_type(AbstractRobot)[0].robot
+                robot = world.get_semantic_annotations_by_type(AbstractRobot)[0]
                 context = StatechartContext.with_extensions(world, [RobotAccess(robot), StatementGrounding()])
 
-                object_pose = Pose(searched_object.root)  # e.g. a Milk from get_semantic_annotations_by_type
+                object_pose = Pose(reference_frame=searched_object.root)  # e.g. a Milk from get_semantic_annotations_by_type
                 location = ReachabilityLocation(
                     target_pose=object_pose, arm=robot.right_arm, context=context
                 )
 
                 pickup_pose = location.ground()  # first sampled standing pose
-                action = PickUpAction(grasp=robot._grasp_from(pickup_pose, searched_object), arm=robot.right_arm)
+                action = PickUpAction(grasp=searched_object.grasp_candidates()[0], arm=robot.right_arm)
             case ActionType.PLACE:
-
-                # TODO use Costmap
-                action = PlaceAction(object_designator=searched_object, target_location=location_coordinates)
+                pass
+                # points = location.sample_points_from_surface(body_to_sample_for=searched_object, amount=50)
+                # place_point = points[0]  # a Point3 in the frame of table.supporting_surface
+                #
+                # action = PlaceAction(
+                #     object_designator=searched_object,
+                #     target_location=Pose(position=place_point, reference_frame=place_point.reference_frame),
+                # )
             case ActionType.FIND:
                 pass
             case ActionType.OPEN:
@@ -172,8 +182,8 @@ class PlannedAction:
         return cls(
             action_type=action,
             text=data.get(PayloadKey.TEXT),
-            location=data.get(PayloadKey.LOCATION),
-            object_name=data.get(PayloadKey.OBJECT),
+            location=location,
+            object_annotation=searched_object,
             person=data.get(PayloadKey.PERSON),
         )
 
@@ -212,9 +222,10 @@ class GeneratedCommand:
     """
 
     @classmethod
-    def from_json(cls, data: dict[str, Any]) -> Self:
+    def from_json(cls, data: dict[str, Any], world: World) -> Self:
         """
         :param data: The command generator's JSON payload.
+        :param world: The world the command is carried out in.
         :return: The command it describes.
         """
         instruction = cls._message_content(data, MessageRole.USER)
@@ -223,7 +234,9 @@ class GeneratedCommand:
             instruction=instruction,
             plans=[
                 GeneratedPlan(
-                    actions=[PlannedAction.from_json(action) for action in plan],
+                    actions=[
+                        PlannedAction.from_json(action, world) for action in plan
+                    ],
                     rule_chain=rule_chain,
                 )
                 for plan, rule_chain in zip(
@@ -245,7 +258,7 @@ class GeneratedCommand:
         raise MissingMessage(role=role)
 
 
-def main():
+def main(world: World) -> None:
     json_string = """
 {
   "messages": [
@@ -286,11 +299,21 @@ def main():
   ]
 }
 """
-    command = GeneratedCommand.from_json(json.loads(json_string))
+    command = GeneratedCommand.from_json(json.loads(json_string), world)
     for plan in command.plans:
         print(plan.rule_chain)
         for action in plan.actions:
-            print("  ", action)
-
+            print(
+                "  ",
+                type(action.action_type).__name__,
+                "| location:",
+                None if action.location is None else type(action.location).__name__,
+                "| object:",
+                None
+                if action.object_annotation is None
+                else type(action.object_annotation).__name__,
+                "| person:",
+                action.person,
+            )
 if __name__ == "__main__":
     main()

@@ -14,6 +14,7 @@ containments of the place setting, and reports them once the plan is done.
 """
 
 import os
+from challenges.GPSR.action_mapping.action_mapping import main as action_mapping_main
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -382,14 +383,14 @@ def main(
     :param debug: Whether to run in debug mode, publishing every copy of the world a
         candidate is tried in.
     """
-    BulletWorldDemonstration(
+    world = BulletWorldDemonstration(
         used_robot=PR2,
         executor_type=executor_type,
         collision_avoidance=collision_avoidance,
         event_segmentation=event_segmentation,
         debug=debug,
     ).run()
-
+    action_mapping_main(world)
 
 if __name__ == "__main__":
     main()

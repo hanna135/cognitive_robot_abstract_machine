@@ -8,6 +8,20 @@ from enum import StrEnum
 from typing_extensions import Any, Self
 
 from challenges.GPSR.action_mapping.exceptions import MissingMessage
+from challenges.semdt_helper_functions.find_class_by_name import SemanticAnnotationClassFinder
+from coraplex.demos.coraplex_real_tracy.demo import world
+
+from coraplex.locations.locations import ReachabilityLocation
+from coraplex.plans.context_extensions import RobotAccess, StatementGrounding
+from coraplex.robot_plans.actions.base import Action
+from coraplex.robot_plans.actions.composite.searching import SearchAction
+from coraplex.robot_plans.actions.core.navigation import NavigateAction
+from coraplex.robot_plans.actions.core.pick_up import PickUpAction
+from coraplex.robot_plans.actions.core.placing import PlaceAction
+from cramph.context import StatechartContext
+from semantic_digital_twin.robots.robot_parts import AbstractRobot
+from semantic_digital_twin.spatial_types import Pose, Point3
+from semantic_digital_twin.world import World
 
 
 # %% Payload vocabulary
@@ -68,7 +82,7 @@ class PlannedAction:
     One step of a generated plan, as the command generator described it.
     """
 
-    action_type: ActionType
+    action_type: Action
     """
     What the robot does in this step.
     """
@@ -93,14 +107,70 @@ class PlannedAction:
     The description of the person the step looks for.
     """
 
+    world: World | None = None
+
     @classmethod
     def from_json(cls, data: dict[str, str]) -> Self:
         """
         :param data: One action of a generated plan.
         :return: The action it describes.
         """
+        action = None
+        semdt_finder = SemanticAnnotationClassFinder()
+        location = semdt_finder.find(data.get(PayloadKey.LOCATION))
+
+        #-- LOCATION ---------------------------------------------------------------------------------------------------
+        location_coordinates = None
+        if location is not None:
+            # location_coordinates = find_free_space_in_room(location, world)       # missing on this branch yet
+            location_coordinates = Pose(position=Point3(0, 0)) #placeholder
+
+        #-- OBJECT -----------------------------------------------------------------------------------------------------
+        searched_object = None
+        try:
+            if location is not None:
+                #searched_object = find_objects_in_room(semdt_finder.find(data.get(PayloadKey.OBJECT)), location, world)[0]     # missing on this branch yet
+                pass #placeholder
+            else:
+                searched_object = world.get_semantic_annotation_by_name(data.get(PayloadKey.OBJECT))
+                # location = find_objects_room(searched_object)     # missing on this branch yet
+
+        except Exception as e:
+            raise Exception("object seems not to be in the world already, Search Action needs to be implemented to find it.")
+
+
+        match data[PayloadKey.ACTION]:
+            case ActionType.SAY:
+                pass # speak action not implemented yet
+            case ActionType.NAVIGATE:
+                if location_coordinates is None:
+                    raise Exception("Can't navigate if no location was given.")
+                action = NavigateAction(target_location=location_coordinates)
+            case ActionType.PICK_UP:
+                robot = world.get_semantic_annotations_by_type(AbstractRobot)[0].robot
+                context = StatechartContext.with_extensions(world, [RobotAccess(robot), StatementGrounding()])
+
+                object_pose = Pose(searched_object.root)  # e.g. a Milk from get_semantic_annotations_by_type
+                location = ReachabilityLocation(
+                    target_pose=object_pose, arm=robot.right_arm, context=context
+                )
+
+                pickup_pose = location.ground()  # first sampled standing pose
+                action = PickUpAction(grasp=robot._grasp_from(pickup_pose, searched_object), arm=robot.right_arm)
+            case ActionType.PLACE:
+
+                # TODO use Costmap
+                action = PlaceAction(object_designator=searched_object, target_location=location_coordinates)
+            case ActionType.FIND:
+                pass
+            case ActionType.OPEN:
+                pass
+            case _:
+                action = None
+
+        # TODO change from strings to semantic annotations
         return cls(
-            action_type=ActionType(data[PayloadKey.ACTION]),
+            action_type=action,
             text=data.get(PayloadKey.TEXT),
             location=data.get(PayloadKey.LOCATION),
             object_name=data.get(PayloadKey.OBJECT),

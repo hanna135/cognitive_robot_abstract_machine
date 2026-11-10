@@ -11,6 +11,7 @@ from challenges.GPSR.action_mapping.exceptions import (
     MissingMessage,
     NoGraspFitsGripper,
 )
+from challenges.GPSR.action_mapping.mock_world import Office
 from challenges.semdt_helper_functions.find_class_by_name import SemanticAnnotationClassFinder
 
 
@@ -24,12 +25,18 @@ from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.talking import TalkingAction
+from coraplex.robot_plans.task_definitions import Command, Step
 from cramph.context import StatechartContext
 from krrood.entity_query_language.query.match import Match
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
-from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates
-from semantic_digital_twin.semantic_annotations.semantic_annotations import Room
+from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates, HasRootBody
+from semantic_digital_twin.semantic_annotations.semantic_annotations import (
+    Room,
+    Kitchen,
+    LivingRoom,
+    Bedroom,
+)
 from semantic_digital_twin.spatial_types import Pose, Point3
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import SemanticAnnotation
@@ -301,6 +308,48 @@ class GeneratedCommand:
             if message[PayloadKey.ROLE] == role:
                 return message[PayloadKey.CONTENT]
         raise MissingMessage(role=role)
+
+    def rewrap_into_command(self) -> Command:
+        location_iteration = None
+        current_location = None
+        first_action = True
+
+        room_list = []
+        i = 0
+        action_list_sorted = [[]] # sorted by room
+        for plan in self.plans:
+
+            for action in plan.actions:
+                if first_action:
+                    current_location = action.location
+                    location_iteration = action.location
+                    room_list.append(action.location)
+                if isinstance(action.location, Room):
+                    current_location = action.location
+                elif isinstance(action.location, HasRootBody):
+                    # current_location = find_objects_room(action.location) # TODO: query currently missing on this branch
+                    pass
+
+                if current_location != location_iteration:
+                    room_list.append(current_location)
+                    location_iteration = current_location
+                    action_list_sorted.append([action.action_type])
+                    i += 1
+                else:
+                    action_list_sorted[i].append(action.action_type)
+
+        steps = []
+        j = 0
+        for step in action_list_sorted:
+            if room_list[j] is None:
+                steps.append(Step(rooms={Kitchen, LivingRoom, Office, Bedroom}, actions=step))
+            else:
+                steps.append(Step(room_list[j], actions=step))
+
+        return Command(instruction=self.instruction, steps=steps)
+
+
+
 
 
 def main(context: StatechartContext) -> GeneratedCommand:

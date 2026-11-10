@@ -1,191 +1,345 @@
+"""
+The kitchen the generated command of :func:`main` is mapped to actions in.
+"""
+
 from __future__ import annotations
 
 # %% Imports
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from pathlib import Path
 
-from challenges.GPSR.action_mapping.action_mapping import main
+import coraplex
+from challenges.GPSR.action_mapping.action_mapping import main as action_main
+from coraplex.demonstrations import RobotDemonstration
+from coraplex.plans.context_extensions import RobotAccess
+from coraplex.plans.executors import PhysicallySimulatedPlanExecutor, PlanExecutor
+from cramph.composites import Sequence
+from cramph.context import ContextExtension, StatechartContext
+from cramph.statechart import Statechart
+from krrood.patterns.path_enumeration import PathEnumeration
+from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
+from semantic_digital_twin.predefined_maps.kitchen_environment import KitchenEnvironment
+from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
-from semantic_digital_twin.semantic_annotations.mixins import (
-    HasRootBody,
-    HasSupportingSurface,
-)
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
-    Cupboard,
-    Food,
+    Bedroom,
+    Floor,
     Human,
-    Shelf,
-    TrashCan,
+    Kitchen,
+    LivingRoom,
+    Milk,
+    Room,
 )
 from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from semantic_digital_twin.specifications.connections import (
+    Connection6DoFSpecification,
+)
+from semantic_digital_twin.specifications.kinematic_structure_entities import (
+    BodySpecification,
+)
 from semantic_digital_twin.specifications.robots import RobotSpecification
+from semantic_digital_twin.specifications.semantic_annotations import (
+    SemanticAnnotationWithRootSpecification,
+)
+from semantic_digital_twin.specifications.worlds import WorldSpecification
 from semantic_digital_twin.world import World
-from semantic_digital_twin.world_description.geometry import Scale
+from semantic_digital_twin.world_description.connections import FixedConnection
+from semantic_digital_twin.world_description.contact import ContactParameters
+from semantic_digital_twin.world_description.geometry import Color
+from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
 # %% Scene vocabulary
 
 
-class MockObjectName(StrEnum):
+class SceneName(StrEnum):
     """
-    The names of the objects in the mock world, as the generated command refers to them.
-    """
-
-    STORAGE_RACK = "storage rack"
-    LAUNDRY_ROOM_TRASHCAN = "laundry room trashcan"
-    BOOK_SHELF = "book shelf"
-    CUPBOARD = "cupboard"
-    BUTTER = "butter"
-    PERSON_POINTING_TO_THE_RIGHT = "person pointing to the right"
-
-
-# %% Classes of the named locations and objects
-
-
-@dataclass(eq=False)
-class StorageRack(Shelf):
-    """
-    A rack things are stored on.
+    The names of the scene's parts, as the kitchen and the generated command call them.
     """
 
-
-@dataclass(eq=False)
-class BookShelf(Shelf):
-    """
-    A shelf books are kept on.
-    """
-
-
-@dataclass(eq=False)
-class LaundryRoomTrashcan(TrashCan, HasSupportingSurface):
-    """
-    The trashcan of the laundry room, whose closed lid things can be put on.
-    """
+    COUNTER_TOP = "counter_top"
+    KITCHEN = "kitchen"
+    LIVING_ROOM = "living_room"
+    BED_ROOM = "bed_room"
+    OFFICE = "office"
+    MILK = "milk"
+    PERSON = "person"
 
 
-@dataclass(eq=False)
-class Butter(Food):
+class SceneFile(PathEnumeration):
     """
-    A block of butter.
-    """
-
-
-# %% Scene objects
-
-
-@dataclass
-class MockObject:
-    """
-    One object of the mock world: what it is, what it is called and where it stands.
+    The files the added objects are built from, under the coraplex resources.
     """
 
-    semantic_annotation_type: type[HasRootBody]
-    """
-    What the object is.
-    """
-
-    object_name: MockObjectName
-    """
-    The name the object is annotated with, so the generated command can refer to it.
-    """
-
-    world_root_T_object: HomogeneousTransformationMatrix
-    """
-    Where the object stands, in the frame of the world root.
-    """
-
-    scale: Scale | None = None
-    """
-    The size of the object's box; ``None`` keeps the default size of its type.
-    """
-
-    def spawn(self, world: World) -> HasRootBody:
-        """
-        :param world: The world to put the object into.
-        :return: The annotation of the new object.
-        """
-        with world.modify_world():
-            return self.semantic_annotation_type.create_with_new_body_in_world(
-                name=self.object_name,
-                world=world,
-                world_root_T_self=self.world_root_T_object,
-                scale=self.scale,
-            )
-
-
-# %% Mock world
-
-
-@dataclass
-class MockWorld:
-    """
-    A robot among the objects the generated command of :func:`main` names, without ROS
-    or a scene file.
-    """
-
-    robot_type: type[AbstractRobot] = PR2
-    """
-    The robot that carries out the command.
-    """
-
-    objects: list[MockObject] = field(
-        default_factory=lambda: [
-            MockObject(
-                StorageRack,
-                MockObjectName.STORAGE_RACK,
-                HomogeneousTransformationMatrix.from_xyz_rpy(2.0, 0.0, 0.5),
-                Scale(0.4, 0.8, 1.0),
-            ),
-            MockObject(
-                Butter,
-                MockObjectName.BUTTER,
-                HomogeneousTransformationMatrix.from_xyz_rpy(2.0, 0.0, 1.025),
-                Scale(0.1, 0.05, 0.05),
-            ),
-            MockObject(
-                LaundryRoomTrashcan,
-                MockObjectName.LAUNDRY_ROOM_TRASHCAN,
-                HomogeneousTransformationMatrix.from_xyz_rpy(0.0, 3.0, 0.35),
-                Scale(0.5, 0.5, 0.7),
-            ),
-            MockObject(
-                BookShelf,
-                MockObjectName.BOOK_SHELF,
-                HomogeneousTransformationMatrix.from_xyz_rpy(-2.0, 0.0, 0.9),
-                Scale(0.4, 1.0, 1.8),
-            ),
-            MockObject(
-                Human,
-                MockObjectName.PERSON_POINTING_TO_THE_RIGHT,
-                HomogeneousTransformationMatrix.from_xyz_rpy(-1.5, 1.0, 0.9),
-                Scale(0.3, 0.5, 1.8),
-            ),
-            MockObject(
-                Cupboard,
-                MockObjectName.CUPBOARD,
-                HomogeneousTransformationMatrix.from_xyz_rpy(0.0, -3.0, 0.5),
-                Scale(0.5, 0.8, 1.0),
-            ),
-        ]
+    MILK = (
+        Path(coraplex.__file__).resolve().parents[2]
+        / "resources"
+        / "objects"
+        / "milk.stl"
     )
     """
-    The objects around the robot, which starts at the origin of the world.
+    The mesh of the milk carton.
     """
 
-    def build(self) -> World:
+    PERSON = (
+        Path(coraplex.__file__).resolve().parents[2]
+        / "resources"
+        / "objects"
+        / "box.urdf"
+    )
+    """
+    A box standing in for the person's body.
+    """
+
+
+# %% Classes of the named objects
+
+
+@dataclass(eq=False)
+class Person(Human):
+    """
+    A person, named so that the generated command's ``"person"`` finds this class.
+    """
+
+
+@dataclass(eq=False)
+class Office(Room):
+    """
+    A room people work in at a desk.
+    """
+
+
+# %% Demonstration
+
+
+@dataclass
+class GeneratedCommandDemonstration(RobotDemonstration):
+    """
+    The robot carries out the actions mapped from the generated command of
+    :func:`~challenges.GPSR.action_mapping.action_mapping.main`, in the kitchen of
+    :class:`~semantic_digital_twin.predefined_maps.kitchen_environment.KitchenEnvironment`
+    with rooms of their kind, a milk carton on its counter top and a person in its
+    kitchen room.
+    """
+
+    used_robot: type[AbstractRobot] = HSRB
+
+    ros_node_name: str = "gpsr_generated_command_demo"
+
+    executor_type: type[PlanExecutor] = PhysicallySimulatedPlanExecutor
+
+    collision_avoidance: bool = False
+
+    room_types: dict[SceneName, type[Room]] = field(
+        default_factory=lambda: {
+            SceneName.KITCHEN: Kitchen,
+            SceneName.LIVING_ROOM: LivingRoom,
+            SceneName.BED_ROOM: Bedroom,
+            SceneName.OFFICE: Office,
+        }
+    )
+    """
+    The kind of each of the kitchen's rooms, by the room's name.
+    """
+
+    def scene_specification(self) -> WorldSpecification:
         """
-        :return: A new world holding the robot and :attr:`objects`.
+        Never called: :meth:`build_scene` builds the kitchen directly, since
+        :class:`~semantic_digital_twin.predefined_maps.kitchen_environment.KitchenEnvironment`
+        builds a :class:`~semantic_digital_twin.world.World`, not a
+        :class:`WorldSpecification`.
         """
-        world = World()
+        raise NotImplementedError
+
+    def build_scene(self) -> World:
+        """
+        Differs from :meth:`RobotDemonstration.build_scene` in starting from the kitchen
+        instead of :meth:`scene_specification`, and in leaving its floors without
+        collision shapes.
+        """
+        scene = KitchenEnvironment().get_world()
+        self.populate_scene(scene)
+        # Each Floor is a flat, zero-volume marker of a room's extent, not a slab the
+        # robot keeps clear of, so collision avoidance would read it as an obstacle.
+        for floor in scene.get_semantic_annotations_by_type(Floor):
+            floor.root.collision = ShapeCollection(reference_frame=floor.root)
+        return scene
+
+    def robot_specification(self) -> RobotSpecification:
+        return RobotSpecification(self.used_robot)
+
+    def is_scene_populated(self, world: World) -> bool:
+        return world.is_kinematic_structure_entity_in_world_by_name(SceneName.MILK)
+
+    def populate_scene(self, world: World) -> None:
+        """
+        Give the kitchen's rooms their kinds, stand the milk on the counter top and the
+        person in the kitchen room.
+        """
+        self.assign_room_types(world)
+        self.place_milk(world)
+        self.place_person(world)
+
+    def build_context_extensions(self, world: World) -> list[ContextExtension]:
+        return [RobotAccess(world.get_semantic_annotations_by_type(self.used_robot)[0])]
+
+    def build_statechart(self, context: StatechartContext) -> Statechart:
+        """
+        Perform the actions of every plan of the generated command, one after another.
+        """
+        command = action_main(context)
+        statechart = Statechart(context=context)
+        statechart.add_node(
+            Sequence(
+                nodes=[
+                    planned_action.action_type
+                    for plan in command.plans
+                    for planned_action in plan.actions
+                ]
+            )
+        )
+        return statechart
+
+    def assign_room_types(self, world: World) -> None:
+        """
+        Replace each of the kitchen's untyped rooms named in :attr:`room_types` by a room
+        of its kind on the same floor.
+
+        :param world: The kitchen.
+        """
         with world.modify_world():
-            world.add_body(Body(name=PrefixedName("map")))
-        RobotSpecification(self.robot_type).spawn(world)
-        for mock_object in self.objects:
-            mock_object.spawn(world)
-        return world
+            for room_name, room_type in self.room_types.items():
+                room = world.get_semantic_annotation_by_name(room_name)
+                world.remove_semantic_annotation(room)
+                world.add_semantic_annotation(
+                    room_type(floor=room.floor, name=room.name)
+                )
+
+    def place_milk(self, world: World) -> Milk:
+        """
+        :param world: The kitchen.
+        :return: A new milk carton standing on the counter top as close to its front edge as it
+            can without overhanging, free to be picked up.
+        """
+        milk = SemanticAnnotationWithRootSpecification(
+            name=SceneName.MILK,
+            semantic_annotation_type=Milk,
+            root_specification=BodySpecification.mesh(
+                SceneName.MILK,
+                str(SceneFile.MILK),
+                connection_specification=Connection6DoFSpecification(),
+            ),
+        ).spawn(world)
+        ContactParameters.create_for_grasped_object().apply_to([milk.root])
+        counter_top = world.get_body_by_name(SceneName.COUNTER_TOP)
+        self.stand_on(milk.root, counter_top, world)
+        self.slide_to_front_edge(milk.root, counter_top, world)
+        return milk
+
+    def place_person(self, world: World) -> Person:
+        """
+        :param world: The kitchen.
+        :return: A new red person fixed in the middle of the kitchen room, so it stays
+            in place although the floors have no collision shapes. It has no collision
+            shape of its own, so the robot drives through it.
+        """
+        person_world = URDFParser.from_file(file_path=str(SceneFile.PERSON)).parse()
+        person_body = person_world.root
+        person_body.visual = ShapeCollection(
+            shapes=[
+                replace(shape, color=Color.RED())
+                for shape in person_body.collision.shapes
+            ],
+            reference_frame=person_body,
+        )
+        kitchen = world.get_semantic_annotation_by_name(SceneName.KITCHEN)
+        world.merge_world(
+            person_world,
+            root_connection=FixedConnection(
+                parent=world.root,
+                child=person_body,
+                parent_T_connection_expression=self.centred_standing_pose(
+                    person_body, kitchen.floor.root, world
+                ),
+            ),
+        )
+        person_body.collision = ShapeCollection(reference_frame=person_body)
+        person = Person(root=person_body, name=PrefixedName(SceneName.PERSON))
+        with world.modify_world():
+            world.add_semantic_annotation(person)
+        return person
+
+    def stand_on(self, body: Body, surface: Body, world: World) -> None:
+        """
+        Move ``body`` to :meth:`centred_standing_pose` on ``surface``.
+
+        :param body: The body to move, attached to the world by a 6DoF connection.
+        :param surface: The body to stand it on.
+        :param world: The world both are in.
+        """
+        body.parent_connection.origin = self.centred_standing_pose(body, surface, world)
+
+    @staticmethod
+    def centred_standing_pose(
+        body: Body, surface: Body, world: World
+    ) -> HomogeneousTransformationMatrix:
+        """
+        :param body: The body to stand, in this world or still in a world of its own.
+        :param surface: The body to stand it on, in ``world``.
+        :param world: The world ``surface`` is in.
+        :return: Where ``body`` stands upright in the middle of ``surface``, in the frame
+            of the root of ``world``.
+        """
+        surface_box = surface.collision.as_bounding_box_collection_in_frame(
+            world.root
+        ).bounding_box()
+        body_box = body.collision.as_bounding_box_collection_in_frame(
+            body
+        ).bounding_box()
+        return HomogeneousTransformationMatrix.from_xyz_rpy(
+            x=(surface_box.min_x + surface_box.max_x) / 2,
+            y=(surface_box.min_y + surface_box.max_y) / 2,
+            z=surface_box.max_z - body_box.min_z,
+            reference_frame=world.root,
+        )
+
+    @staticmethod
+    def slide_to_front_edge(body: Body, surface: Body, world: World) -> None:
+        """
+        Slide ``body``, standing on ``surface``, along the y-axis until its side is flush
+        with the edge of ``surface`` facing the origin of the world, where the robot
+        starts.
+
+        :param body: The body to slide, attached to the world by a 6DoF connection.
+        :param surface: The body it stands on.
+        :param world: The world both are in.
+        """
+        surface_box = surface.collision.as_bounding_box_collection_in_frame(
+            world.root
+        ).bounding_box()
+        body_box = body.collision.as_bounding_box_collection_in_frame(
+            body
+        ).bounding_box()
+        world_root_T_body = body.parent_connection.origin
+        if surface_box.min_y > 0:
+            world_root_T_body.y = surface_box.min_y - body_box.min_y
+        else:
+            world_root_T_body.y = surface_box.max_y - body_box.max_y
+        body.parent_connection.origin = world_root_T_body
+
+
+def main(headless: bool = False) -> World:
+    """
+    Run the demonstration.
+
+    :param headless: Whether the physics runs without a viewer.
+    :return: The world the command was carried out in.
+    """
+    return GeneratedCommandDemonstration(headless=headless).run()
 
 
 if __name__ == "__main__":
-    main(MockWorld().build())
+    main()

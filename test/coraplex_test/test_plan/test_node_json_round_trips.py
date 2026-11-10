@@ -54,6 +54,7 @@ from coraplex.robot_plans.actions.core.pick_up import (
     ReachAction,
 )
 from coraplex.robot_plans.actions.core.placing import PlaceAction
+from coraplex.robot_plans.actions.core.talking import TalkingAction
 from coraplex.robot_plans.actions.core.robot_body import (
     FollowToolCenterPointPathAction,
     MoveManipulatorAction,
@@ -462,6 +463,15 @@ def _tool_cases() -> list[ActionRoundTripCase]:
     ]
 
 
+def _speech_cases() -> list[ActionRoundTripCase]:
+    return [
+        ActionRoundTripCase(
+            TalkingAction,
+            lambda world: [TalkingAction(speaking_text="I will bring you the milk")],
+        ),
+    ]
+
+
 def _cases() -> list[ActionRoundTripCase]:
     """
     :return: One case per action and perception node class, each in the apartment of
@@ -474,6 +484,7 @@ def _cases() -> list[ActionRoundTripCase]:
             *_navigation_and_perception_cases(),
             *_manipulation_cases(),
             *_tool_cases(),
+            *_speech_cases(),
         )
     ]
 

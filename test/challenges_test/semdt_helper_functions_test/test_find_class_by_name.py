@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # %% Imports
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import pytest
@@ -44,6 +45,58 @@ def test_name_with_word_separators_finds_class(
     finder: SemanticAnnotationClassFinder, name: str
 ):
     assert finder.find(name) is DrinkingContainer
+
+
+# %% Matching part of a name
+
+
+def test_name_contained_in_one_class_name_finds_that_class(
+    finder: SemanticAnnotationClassFinder,
+):
+    @dataclass(eq=False)
+    class ContainedNameWidget(SemanticAnnotation): ...
+
+    assert finder.find("contained name") is ContainedNameWidget
+
+
+def test_exact_name_wins_over_names_containing_it(
+    finder: SemanticAnnotationClassFinder,
+):
+    @dataclass(eq=False)
+    class ExactNameProbe(SemanticAnnotation): ...
+
+    @dataclass(eq=False)
+    class ExactNameProbeHolder(SemanticAnnotation): ...
+
+    assert finder.find("exact name probe") is ExactNameProbe
+
+
+def test_abstract_class_containing_the_name_is_skipped(
+    finder: SemanticAnnotationClassFinder,
+):
+    @dataclass(eq=False)
+    class SkippedAbstractGadget(SemanticAnnotation, ABC):
+        @abstractmethod
+        def describe_gadget(self) -> str: ...
+
+    @dataclass(eq=False)
+    class SkippedConcreteGadget(SemanticAnnotation): ...
+
+    assert finder.find("gadget") is SkippedConcreteGadget
+
+
+def test_name_contained_in_two_class_names_raises(
+    finder: SemanticAnnotationClassFinder,
+):
+    @dataclass(eq=False)
+    class TwiceContainedLeft(SemanticAnnotation): ...
+
+    @dataclass(eq=False)
+    class TwiceContainedRight(SemanticAnnotation): ...
+
+    with pytest.raises(AmbiguousSemanticAnnotationName) as raised:
+        finder.find("twice contained")
+    assert set(raised.value.matches) == {TwiceContainedLeft, TwiceContainedRight}
 
 
 # %% Failures

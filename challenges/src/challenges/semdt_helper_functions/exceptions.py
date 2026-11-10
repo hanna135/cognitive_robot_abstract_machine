@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 @dataclass
 class UnknownSemanticAnnotationName(DataclassException):
     """
-    Raised when no semantic annotation class has the requested name.
+    Raised when no semantic annotation class has or contains the requested name.
     """
 
     name: str
@@ -27,7 +27,7 @@ class UnknownSemanticAnnotationName(DataclassException):
     """
 
     def error_message(self) -> str:
-        return f"No semantic annotation class is named '{self.name}'."
+        return f"No semantic annotation class is named or contains '{self.name}'."
 
     def suggest_correction(self) -> str:
         return (
@@ -39,7 +39,8 @@ class UnknownSemanticAnnotationName(DataclassException):
 @dataclass
 class AmbiguousSemanticAnnotationName(DataclassException):
     """
-    Raised when several semantic annotation classes have the requested name.
+    Raised when several semantic annotation classes have the requested name, or none has
+    it and several concrete classes contain it.
     """
 
     name: str
@@ -49,7 +50,7 @@ class AmbiguousSemanticAnnotationName(DataclassException):
 
     matches: list[type[SemanticAnnotation]]
     """
-    The classes that have the name.
+    The classes that have or contain the name.
     """
 
     def error_message(self) -> str:

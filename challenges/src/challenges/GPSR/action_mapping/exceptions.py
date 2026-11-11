@@ -23,8 +23,9 @@ if TYPE_CHECKING:
 
 @dataclass
 class MissingActionArgument(DataclassException):
-    """Raised when a planned action lacks an argument its kind of action
-    needs."""
+    """
+    Raised when a planned action lacks an argument its kind of action needs.
+    """
 
     action: ActionType
     """
@@ -32,7 +33,9 @@ class MissingActionArgument(DataclassException):
     """
 
     argument: PayloadKey
-    """The key of the missing argument."""
+    """
+    The key of the missing argument.
+    """
 
     def error_message(self) -> str:
         return f"The '{self.action}' action has no '{self.argument}'."
@@ -49,7 +52,9 @@ class MissingActionArgument(DataclassException):
 
 @dataclass
 class NoFreeTableInRoom(DataclassException):
-    """Raised when no table in a room has space to put an object down on."""
+    """
+    Raised when no table in a room has space to put an object down on.
+    """
 
     room_type: type[Room]
     """
@@ -57,7 +62,9 @@ class NoFreeTableInRoom(DataclassException):
     """
 
     placed_object: HasRootBody
-    """The object that was to be put down."""
+    """
+    The object that was to be put down.
+    """
 
     def error_message(self) -> str:
         return f"No table in the {self.room_type.__name__} has space for '{self.placed_object.name}'."
@@ -71,8 +78,9 @@ class NoFreeTableInRoom(DataclassException):
 
 @dataclass
 class NoFreeSurface(DataclassException):
-    """Raised when no surface of the named kind has space to put an object down
-    on."""
+    """
+    Raised when no surface of the named kind has space to put an object down on.
+    """
 
     surface_type: type[HasSupportingSurface]
     """
@@ -80,7 +88,9 @@ class NoFreeSurface(DataclassException):
     """
 
     placed_object: HasRootBody
-    """The object that was to be put down."""
+    """
+    The object that was to be put down.
+    """
 
     def error_message(self) -> str:
         return (
@@ -94,8 +104,9 @@ class NoFreeSurface(DataclassException):
 
 @dataclass
 class NoStandingPoseOnFloor(DataclassException):
-    """Raised when the robot can reach a target only from poses that lie over
-    no floor."""
+    """
+    Raised when the robot can reach a target only from poses that lie over no floor.
+    """
 
     target_pose: Pose
     """
@@ -114,8 +125,9 @@ class NoStandingPoseOnFloor(DataclassException):
 
 @dataclass
 class NoGraspFitsGripper(DataclassException):
-    """Raised when every grasp an object offers is wider than the gripper
-    opens."""
+    """
+    Raised when every grasp an object offers is wider than the gripper opens.
+    """
 
     graspable: HasGraspCandidates
     """
@@ -123,7 +135,9 @@ class NoGraspFitsGripper(DataclassException):
     """
 
     gripper: EndEffector
-    """The gripper that was to take hold of it."""
+    """
+    The gripper that was to take hold of it.
+    """
 
     def error_message(self) -> str:
         return (

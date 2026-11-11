@@ -15,6 +15,7 @@ from challenges.GPSR.action_mapping.action_mapping import main as action_main
 from coraplex.demonstrations import RobotDemonstration
 from coraplex.plans.context_extensions import RobotAccess
 from coraplex.plans.executors import PhysicallySimulatedPlanExecutor, PlanExecutor
+from coraplex.robot_plans.transformation_by_room import RoomVisitPlanner
 from cramph.composites import Sequence
 from cramph.context import ContextExtension, StatechartContext
 from cramph.statechart import Statechart
@@ -91,6 +92,7 @@ class SceneFile(PathEnumeration):
         / "box.urdf"
     )
     """A box standing in for the person's body."""
+
 
 # %% Classes of the named objects
 
@@ -237,16 +239,26 @@ class GeneratedCommandDemonstration(RobotDemonstration):
         return [RobotAccess(world.get_semantic_annotations_by_type(self.used_robot)[0])]
 
     def build_statechart(self, context: StatechartContext) -> Statechart:
-        """Perform the actions of every plan of the generated command, one
-        after another."""
-        command = action_main(context)
+        """Perform the actions of every plan of the generated command, room
+        visit by room visit, in the order :meth:`~coraplex.robot_plans.transfor
+        mation_by_room.RoomVisitPlanner.transform_plan_by_rooms` orders them
+        into."""
+        generated_command = action_main(context)
+        any_room = {
+            type(room) for room in context.world.get_semantic_annotations_by_type(Room)
+        }
+        commands = [
+            plan.rewrap_into_command(generated_command.instruction, any_room)
+            for plan in generated_command.plans
+        ]
+        room_visits = RoomVisitPlanner().transform_plan_by_rooms(commands)
         statechart = Statechart(context=context)
         statechart.add_node(
             Sequence(
                 nodes=[
-                    planned_action.action_type
-                    for plan in command.plans
-                    for planned_action in plan.actions
+                    action
+                    for room_visit in room_visits
+                    for action in room_visit.actions
                 ]
             )
         )

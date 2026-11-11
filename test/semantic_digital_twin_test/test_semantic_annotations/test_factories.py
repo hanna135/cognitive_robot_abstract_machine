@@ -54,6 +54,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Hood,
     Toaster,
     CoffeeMachine,
+    ShelfLayer,
 )
 from krrood_spatial_math.spatial_types import HomogeneousTransformationMatrix, Point3
 from krrood_spatial_math.spatial_types import Vector3
@@ -1513,3 +1514,25 @@ def test_elevator_without_a_movable_joint_cannot_drive():
 
     with pytest.raises(MissingMovableJointError):
         elevator.drive_to_floor(ground_floor)
+
+
+# %% sampling free space on a supporting surface
+
+
+def test_part_below_a_surface_leaves_the_surface_free():
+    world = World.create_with_root_body("root")
+    with world.modify_world():
+        table = Table.create_with_new_body_in_world(
+            name="table", world=world, scale=Scale(1.0, 1.0, 0.1)
+        )
+        shelf_below = ShelfLayer.create_with_new_body_in_world(
+            name="shelf_below",
+            world=world,
+            scale=Scale(1.0, 1.0, 0.02),
+            world_root_T_self=HomogeneousTransformationMatrix.from_xyz_rpy(z=-0.3),
+        )
+        table.add_object(shelf_below)
+
+    points = table.sample_points_from_surface(amount=10)
+
+    assert len(points) == 10

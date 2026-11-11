@@ -42,6 +42,7 @@ from semantic_digital_twin.reasoning.queries import (
     find_free_space_in_room,
     find_free_space_next_to,
     find_objects_in_room,
+    find_objects_room,
 )
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.semantic_annotations.mixins import (
@@ -51,9 +52,6 @@ from semantic_digital_twin.semantic_annotations.mixins import (
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Room,
-    Kitchen,
-    LivingRoom,
-    Bedroom,
     Floor,
     Table,
 )
@@ -66,7 +64,9 @@ from semantic_digital_twin.world_description.world_entity import SemanticAnnotat
 
 
 class PayloadKey(StrEnum):
-    """The keys of a generated command's JSON payload."""
+    """
+    The keys of a generated command's JSON payload.
+    """
 
     PLANS = "plans"
     ACTION = "action"
@@ -77,7 +77,9 @@ class PayloadKey(StrEnum):
 
 
 class ActionType(StrEnum):
-    """The kinds of action a generated plan consists of."""
+    """
+    The kinds of action a generated plan consists of.
+    """
 
     SAY = "say"
     NAVIGATE = "navigate"
@@ -92,24 +94,51 @@ class ActionType(StrEnum):
 
 @dataclass
 class PlannedAction:
-    """One step of a generated plan, as the command generator described it."""
+    """
+    One step of a generated plan, as the command generator described it.
+    """
 
     action_type: Action | Match | None
-    """What the robot does in this step, as an action or as a statement
-    grounded when the step starts; ``None`` for a kind of step that is not
-    mapped yet."""
+    """
+    What the robot does in this step, as an action or as a statement grounded when the
+    step starts; ``None`` for a kind of step that is not mapped yet.
+    """
 
     text: str | None = None
-    """What the robot says, for :attr:`ActionType.SAY`."""
+    """
+    What the robot says, for :attr:`ActionType.SAY`.
+    """
 
     location: SemanticAnnotation | None = None
-    """The named place the step goes to, places at or opens."""
+    """
+    The named place the step goes to, places at or opens.
+    """
 
-    object_annotation: str | None = None
-    """The name of the object the step picks up or places."""
+    object_annotation: HasRootBody | None = None
+    """
+    The object the step picks up or places.
+    """
 
     person: str | None = None
-    """The description of the person the step looks for."""
+    """
+    The description of the person the step looks for.
+    """
+
+    @property
+    def room_type(self) -> type[Room] | None:
+        """
+        :return: The kind of room this step is performed in: the room it names, else the
+            room of the place or object it names; ``None`` if it is performed wherever
+            the robot already is.
+        """
+        if isinstance(self.location, Room):
+            return type(self.location)
+        for located in (self.location, self.object_annotation):
+            if not isinstance(located, HasRootBody):
+                continue
+            room = find_objects_room(located)
+            return None if room is None else type(room)
+        return None
 
     @classmethod
     def from_json(cls, data: dict[str, str], context: StatechartContext) -> Self:
@@ -352,22 +381,62 @@ class PlannedAction:
 
 @dataclass
 class GeneratedPlan:
-    """The actions that carry out one task of a command."""
+    """
+    The actions that carry out one task of a command.
+    """
 
     actions: list[PlannedAction]
-    """The actions in the order the robot performs them."""
+    """
+    The actions in the order the robot performs them.
+    """
+
+    def rewrap_into_command(
+        self, instruction: str, any_room: set[type[Room]]
+    ) -> Command:
+        """
+        :param instruction: The command as the operator spoke it.
+        :param any_room: The kinds of room a step that names no room may be performed in.
+        :return: This plan as a command whose steps each hold the consecutive actions
+            performed in one kind of room; an action performed wherever the robot
+            already is joins the step around it, or the first step if it leads.
+        """
+        steps: list[Step] = []
+        leading_actions: list[Action | Match | None] = []
+        for planned_action in self.actions:
+            room_type = planned_action.room_type
+            if steps and (room_type is None or steps[-1].rooms == {room_type}):
+                steps[-1].actions.append(planned_action.action_type)
+                continue
+            if room_type is None:
+                leading_actions.append(planned_action.action_type)
+                continue
+            steps.append(
+                Step(
+                    rooms={room_type},
+                    actions=[*leading_actions, planned_action.action_type],
+                )
+            )
+            leading_actions = []
+        if leading_actions:
+            steps.append(Step(rooms=any_room, actions=leading_actions))
+        return Command(instruction=instruction, steps=steps)
 
 
 @dataclass
 class GeneratedCommand:
-    """A spoken command together with the plans the command generator derived
-    from it."""
+    """
+    A spoken command together with the plans the command generator derived from it.
+    """
 
     instruction: str
-    """The command as the operator spoke it."""
+    """
+    The command as the operator spoke it.
+    """
 
     plans: list[GeneratedPlan]
-    """One plan for each task of the command, in the order they were given."""
+    """
+    One plan for each task of the command, in the order they were given.
+    """
 
     @classmethod
     def from_json(
@@ -390,44 +459,6 @@ class GeneratedCommand:
                 for plan in data[PayloadKey.PLANS]
             ],
         )
-
-    def rewrap_into_command(self) -> Command:
-        location_iteration = None
-        current_location = None
-        first_action = True
-
-        room_list = []
-        i = 0
-        action_list_sorted = [[]]  # sorted by room
-        for plan in self.plans:
-            for action in plan.actions:
-                if first_action:
-                    current_location = action.location
-                    location_iteration = action.location
-                    room_list.append(action.location)
-                if isinstance(action.location, Room):
-                    current_location = action.location
-                elif isinstance(action.location, HasRootBody):
-                    # current_location = find_objects_room(action.location) # TODO: query currently missing on this branch
-                    pass
-
-                if current_location != location_iteration:
-                    room_list.append(current_location)
-                    location_iteration = current_location
-                    action_list_sorted.append([action.action_type])
-                    i += 1
-                else:
-                    action_list_sorted[i].append(action.action_type)
-
-        steps = []
-        j = 0
-        for step in action_list_sorted:
-            if room_list[j] is None:
-                steps.append(Step(rooms={Kitchen, LivingRoom, Bedroom}, actions=step))
-            else:
-                steps.append(Step(room_list[j], actions=step))
-
-        return Command(instruction=self.instruction, steps=steps)
 
 
 def main(context: StatechartContext) -> GeneratedCommand:

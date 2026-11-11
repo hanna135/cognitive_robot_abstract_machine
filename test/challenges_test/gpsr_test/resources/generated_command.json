@@ -1,38 +1,59 @@
 {
-  "messages": [
-    {
-      "role": "user",
-      "content": "Can you take butter from the storage rack and put it on the laundry room trashcan also please head to the book shelf then find the person pointing to the right and say your team's name also open the cupboard"
-    },
-    {
-      "role": "assistant",
-      "content": {
-        "plans": [
-          [
-            { "action": "say", "text": "I will pick up butter from the storage rack and put it on the laundry room trashcan" },
-            { "action": "navigate", "location": "storage rack" },
-            { "action": "pick_up", "object": "butter" },
-            { "action": "navigate", "location": "laundry room trashcan" },
-            { "action": "place", "object": "butter", "location": "laundry room trashcan" }
-          ],
-          [
-            { "action": "say", "text": "I will go to the book shelf, find the person pointing to the right and tell them my team's name" },
-            { "action": "navigate", "location": "book shelf" },
-            { "action": "find", "person": "person pointing to the right" },
-            { "action": "say", "text": "<team name>" }
-          ],
-          [
-            { "action": "say", "text": "I will open the cupboard" },
-            { "action": "navigate", "location": "cupboard" },
-            { "action": "open", "location": "cupboard" }
-          ]
-        ]
+  "plans": [
+    [
+      {
+        "action": "say",
+        "text": "I will pick up butter from the storage rack and put it on the laundry room trashcan"
+      },
+      {
+        "action": "navigate",
+        "location": "storage rack"
+      },
+      {
+        "action": "pick_up",
+        "object": "butter"
+      },
+      {
+        "action": "navigate",
+        "location": "laundry room trashcan"
+      },
+      {
+        "action": "place",
+        "object": "butter",
+        "location": "laundry room trashcan"
       }
-    }
-  ],
-  "rule_chains": [
-    "take_object_from_placement>place_object_on_placement",
-    "go_to_destination>find_described_person>tell_fact",
-    "open_location"
+    ],
+    [
+      {
+        "action": "say",
+        "text": "I will go to the book shelf, find the person pointing to the right and tell them my team's name"
+      },
+      {
+        "action": "navigate",
+        "location": "book shelf"
+      },
+      {
+        "action": "find",
+        "person": "person pointing to the right"
+      },
+      {
+        "action": "say",
+        "text": "<team name>"
+      }
+    ],
+    [
+      {
+        "action": "say",
+        "text": "I will open the cupboard"
+      },
+      {
+        "action": "navigate",
+        "location": "cupboard"
+      },
+      {
+        "action": "open",
+        "location": "cupboard"
+      }
+    ]
   ]
 }

@@ -8,18 +8,24 @@ from enum import StrEnum
 from typing_extensions import Any, Self
 
 from challenges.GPSR.action_mapping.exceptions import (
-    MissingMessage,
+    MissingActionArgument,
+    NoFreeSurface,
+    NoFreeTableInRoom,
     NoGraspFitsGripper,
 )
-from challenges.GPSR.action_mapping.mock_world import Office
-from challenges.semdt_helper_functions.find_class_by_name import SemanticAnnotationClassFinder
+from challenges.semdt_helper_functions.find_class_by_name import (
+    SemanticAnnotationClassFinder,
+)
 
 
 from coraplex.locations.locations import ReachabilityLocation
 from coraplex.plans.context_extensions import RobotAccess, StatementGrounding
 from coraplex.querying.grasp_closeness import GraspsByCloseness
 from coraplex.robot_plans.actions.base import Action
-from coraplex.robot_plans.actions.composite.transporting import MoveAndPickUpAction
+from coraplex.robot_plans.actions.composite.transporting import (
+    MoveAndPickUpAction,
+    MoveAndPlaceAction,
+)
 from coraplex.robot_plans.actions.composite.searching import SearchAction
 from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
@@ -30,14 +36,23 @@ from cramph.context import StatechartContext
 from krrood.entity_query_language.query.match import Match
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
-from semantic_digital_twin.semantic_annotations.mixins import HasGraspCandidates, HasRootBody
+from semantic_digital_twin.semantic_annotations.mixins import (
+    HasGraspCandidates,
+    HasRootBody,
+    HasSupportingSurface,
+)
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Room,
     Kitchen,
     LivingRoom,
     Bedroom,
+    Table,
 )
-from semantic_digital_twin.spatial_types import Pose, Point3
+from semantic_digital_twin.spatial_types import (
+    HomogeneousTransformationMatrix,
+    Point3,
+    Pose,
+)
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import SemanticAnnotation
 
@@ -46,15 +61,9 @@ from semantic_digital_twin.world_description.world_entity import SemanticAnnotat
 
 
 class PayloadKey(StrEnum):
-    """
-    The keys of a generated command's JSON payload.
-    """
+    """The keys of a generated command's JSON payload."""
 
-    MESSAGES = "messages"
-    ROLE = "role"
-    CONTENT = "content"
     PLANS = "plans"
-    RULE_CHAINS = "rule_chains"
     ACTION = "action"
     TEXT = "text"
     LOCATION = "location"
@@ -62,26 +71,8 @@ class PayloadKey(StrEnum):
     PERSON = "person"
 
 
-class MessageRole(StrEnum):
-    """
-    Who wrote a message of a generated command.
-    """
-
-    USER = "user"
-    """
-    The operator who gave the spoken command.
-    """
-
-    ASSISTANT = "assistant"
-    """
-    The command generator that answered with the plans.
-    """
-
-
 class ActionType(StrEnum):
-    """
-    The kinds of action a generated plan consists of.
-    """
+    """The kinds of action a generated plan consists of."""
 
     SAY = "say"
     NAVIGATE = "navigate"
@@ -96,35 +87,24 @@ class ActionType(StrEnum):
 
 @dataclass
 class PlannedAction:
-    """
-    One step of a generated plan, as the command generator described it.
-    """
+    """One step of a generated plan, as the command generator described it."""
 
     action_type: Action | Match | None
-    """
-    What the robot does in this step, as an action or as a statement grounded when the
-    step starts; ``None`` for a kind of step that is not mapped yet.
-    """
+    """What the robot does in this step, as an action or as a statement
+    grounded when the step starts; ``None`` for a kind of step that is not
+    mapped yet."""
 
     text: str | None = None
-    """
-    What the robot says, for :attr:`ActionType.SAY`.
-    """
+    """What the robot says, for :attr:`ActionType.SAY`."""
 
     location: SemanticAnnotation | None = None
-    """
-    The named place the step goes to, places at or opens.
-    """
+    """The named place the step goes to, places at or opens."""
 
     object_annotation: str | None = None
-    """
-    The name of the object the step picks up or places.
-    """
+    """The name of the object the step picks up or places."""
 
     person: str | None = None
-    """
-    The description of the person the step looks for.
-    """
+    """The description of the person the step looks for."""
 
     @classmethod
     def from_json(cls, data: dict[str, str], context: StatechartContext) -> Self:
@@ -144,39 +124,52 @@ class PlannedAction:
         else:
             location = None
 
-        #-- LOCATION ---------------------------------------------------------------------------------------------------
+        # -- LOCATION ---------------------------------------------------------------------------------------------------
         location_coordinates = None
         if location is not None:
             if isinstance(location, Room):
                 # location_coordinates = find_free_space_in_room(location, world)       # missing on this branch yet
-                location_coordinates = Pose.from_xyz_rpy(x=1, y=1, reference_frame=world.root)  # placeholder
+                location_coordinates = Pose.from_xyz_rpy(
+                    x=1, y=1, reference_frame=world.root
+                )  # placeholder
                 print("ROOM")
             else:
-                #location_coordinates = location.root.global_pose # use rodys query to find place near
+                # location_coordinates = location.root.global_pose # use rodys query to find place near
                 location_coordinates = Pose.from_xyz_rpy(
                     x=1, y=1, reference_frame=world.root
                 )
                 print("NOT ROOM", type[location])
 
-        #-- OBJECT -----------------------------------------------------------------------------------------------------
+        # -- OBJECT -----------------------------------------------------------------------------------------------------
         searched_object = None
         try:
             if location is not None and data.get(PayloadKey.OBJECT) is not None:
-                #searched_object = find_objects_in_room(semdt_finder.find(data.get(PayloadKey.OBJECT)), location, world)[0]     # missing on this branch yet
+                # searched_object = find_objects_in_room(semdt_finder.find(data.get(PayloadKey.OBJECT)), location, world)[0]     # missing on this branch yet
                 searched_object = world.get_semantic_annotation_by_name(
                     data.get(PayloadKey.OBJECT)
-                ) #placeholder
+                )  # placeholder
             elif data.get(PayloadKey.OBJECT) is not None:
-                searched_object = world.get_semantic_annotation_by_name(data.get(PayloadKey.OBJECT))
+                searched_object = world.get_semantic_annotation_by_name(
+                    data.get(PayloadKey.OBJECT)
+                )
                 # location = find_objects_room(searched_object)     # missing on this branch yet
 
         except Exception as e:
-            raise Exception("object seems not to be in the world already, Search Action needs to be implemented to find it.")
+            raise Exception(
+                "object seems not to be in the world already, Search Action needs to be implemented to find it."
+            )
+
+        # -- PERSON -----------------------------------------------------------------------------------------------------
+        searched_person = None
+        if data.get(PayloadKey.PERSON) is not None:
+            searched_person = world.get_semantic_annotation_by_name(
+                data.get(PayloadKey.PERSON)
+            )
 
         match data[PayloadKey.ACTION]:
             case ActionType.SAY:
                 action = TalkingAction(speaking_text=data.get(PayloadKey.TEXT))
-            case ActionType.NAVIGATE: #DONE
+            case ActionType.NAVIGATE:  # DONE
                 if location_coordinates is None:
                     raise Exception("Can't navigate if no location was given.")
                 action = NavigateAction(target_location=location_coordinates)
@@ -185,9 +178,43 @@ class PlannedAction:
                     searched_object, context
                 )
             case ActionType.PLACE:
-                pass
+                if searched_object is None:
+                    raise MissingActionArgument(
+                        action=ActionType.PLACE, argument=PayloadKey.OBJECT
+                    )
+                if location_coordinates is None:
+                    raise MissingActionArgument(
+                        action=ActionType.PLACE, argument=PayloadKey.LOCATION
+                    )
+                if isinstance(location, Room):
+                    target_location = cls.free_pose_on_table_in_room(
+                        location, searched_object, world
+                    )
+                elif isinstance(location, HasSupportingSurface):
+                    target_location = cls.free_pose_on_first_free_surface(
+                        world.get_semantic_annotations_by_type(semdt_type),
+                        searched_object,
+                    )
+                    if target_location is None:
+                        raise NoFreeSurface(
+                            surface_type=semdt_type, placed_object=searched_object
+                        )
+                else:
+                    target_location = location_coordinates
+                action = cls.place_from_reachable_standing_pose(
+                    searched_object, target_location, context
+                )
             case ActionType.FIND:
-                pass
+                if searched_object is not None:
+                    action = NavigateAction(
+                        target_location=searched_object.root.global_pose
+                    )
+                elif searched_person is not None:
+                    action = NavigateAction(
+                        target_location=searched_person.root.global_pose
+                    )
+                else:
+                    raise Exception("Nothing to find here.")
             case ActionType.OPEN:
                 pass
             case _:
@@ -237,77 +264,122 @@ class PlannedAction:
             standing_pose, fitting_grasp, arm
         )
 
+    @staticmethod
+    def place_from_reachable_standing_pose(
+        held_object: HasGraspCandidates,
+        target_location: Pose,
+        context: StatechartContext,
+    ) -> MoveAndPlaceAction:
+        """
+        :param held_object: The object to put down, held by the robot's first arm.
+        :param target_location: Where to put the object down.
+        :param context: The context of the plan, whose robot places the object.
+        :return: A placing that carries the object to the first standing pose the
+            reachability costmap offers for ``target_location`` and puts it down there.
+        """
+        arm = context.require_extension(RobotAccess).robot.all_arms[0]
+        standing_pose = ReachabilityLocation(
+            target_pose=target_location, arm=arm, context=context
+        ).ground()
+        return MoveAndPlaceAction.from_standing_position(
+            standing_pose, target_location, held_object
+        )
+
+    @staticmethod
+    def free_pose_on_table_in_room(
+        room: Room, placed_object: HasRootBody, world: World
+    ) -> Pose:
+        """
+        :param room: The room to put the object down in.
+        :param placed_object: The object to put down.
+        :param world: The world the room is part of.
+        :return: A pose on the first table over the room's floor where the object
+            fits, as :meth:`free_pose_on_first_free_surface` samples it.
+        :raises NoFreeTableInRoom: If no table in the room has space for the object.
+        """
+        floor_extent = room.floor.root.visual.as_bounding_box_collection_at_origin(
+            HomogeneousTransformationMatrix(reference_frame=world.root)
+        ).bounding_box()
+        tables_in_room = [
+            table
+            for table in world.get_semantic_annotations_by_type(Table)
+            if floor_extent.min_x
+            <= float(table.root.global_pose.x)
+            <= floor_extent.max_x
+            and floor_extent.min_y
+            <= float(table.root.global_pose.y)
+            <= floor_extent.max_y
+        ]
+        free_pose = PlannedAction.free_pose_on_first_free_surface(
+            tables_in_room, placed_object
+        )
+        if free_pose is None:
+            raise NoFreeTableInRoom(room=room, placed_object=placed_object)
+        return free_pose
+
+    @staticmethod
+    def free_pose_on_first_free_surface(
+        surfaces: list[HasSupportingSurface], placed_object: HasRootBody
+    ) -> Pose | None:
+        """
+        :param surfaces: The surfaces to put the object down on, in order of preference.
+        :param placed_object: The object to put down.
+        :return: The most likely sampled pose where ``placed_object`` fits without
+            touching other objects, on the first of ``surfaces`` that has one; ``None``
+            if none has.
+        """
+        for surface in surfaces:
+            free_points = surface.sample_points_from_surface(
+                body_to_sample_for=placed_object
+            )
+            if free_points:
+                return Pose(
+                    position=free_points[0],
+                    reference_frame=free_points[0].reference_frame,
+                )
+        return None
+
 
 @dataclass
 class GeneratedPlan:
-    """
-    The actions that carry out one task of a command.
-    """
+    """The actions that carry out one task of a command."""
 
     actions: list[PlannedAction]
-    """
-    The actions in the order the robot performs them.
-    """
-
-    rule_chain: str
-    """
-    The grammar rules of the command generator the task was built from, joined by ``>``.
-    """
-
+    """The actions in the order the robot performs them."""
 
 
 @dataclass
 class GeneratedCommand:
-    """
-    A spoken command together with the plans the command generator derived from it.
-    """
+    """A spoken command together with the plans the command generator derived
+    from it."""
 
     instruction: str
-    """
-    The command as the operator spoke it.
-    """
+    """The command as the operator spoke it."""
 
     plans: list[GeneratedPlan]
-    """
-    One plan for each task of the command, in the order they were given.
-    """
+    """One plan for each task of the command, in the order they were given."""
 
     @classmethod
-    def from_json(cls, data: dict[str, Any], context: StatechartContext) -> Self:
+    def from_json(
+        cls, data: dict[str, Any], instruction: str, context: StatechartContext
+    ) -> Self:
         """
         :param data: The command generator's JSON payload.
+        :param instruction: The command as the operator spoke it.
         :param context: The context of the plan the command runs in.
         :return: The command it describes.
         """
-        instruction = cls._message_content(data, MessageRole.USER)
-        plans = cls._message_content(data, MessageRole.ASSISTANT)[PayloadKey.PLANS]
-
         return cls(
             instruction=instruction,
             plans=[
                 GeneratedPlan(
                     actions=[
                         PlannedAction.from_json(action, context) for action in plan
-                    ],
-                    rule_chain=rule_chain,
+                    ]
                 )
-                for plan, rule_chain in zip(
-                    plans, data[PayloadKey.RULE_CHAINS], strict=True
-                )
+                for plan in data[PayloadKey.PLANS]
             ],
         )
-
-    @staticmethod
-    def _message_content(data: dict[str, Any], role: MessageRole) -> Any:
-        """
-        :param data: The command generator's JSON payload.
-        :param role: Whose message to read.
-        :return: The content of the first message written by ``role``.
-        """
-        for message in data[PayloadKey.MESSAGES]:
-            if message[PayloadKey.ROLE] == role:
-                return message[PayloadKey.CONTENT]
-        raise MissingMessage(role=role)
 
     def rewrap_into_command(self) -> Command:
         location_iteration = None
@@ -316,9 +388,8 @@ class GeneratedCommand:
 
         room_list = []
         i = 0
-        action_list_sorted = [[]] # sorted by room
+        action_list_sorted = [[]]  # sorted by room
         for plan in self.plans:
-
             for action in plan.actions:
                 if first_action:
                     current_location = action.location
@@ -342,93 +413,48 @@ class GeneratedCommand:
         j = 0
         for step in action_list_sorted:
             if room_list[j] is None:
-                steps.append(Step(rooms={Kitchen, LivingRoom, Office, Bedroom}, actions=step))
+                steps.append(Step(rooms={Kitchen, LivingRoom, Bedroom}, actions=step))
             else:
                 steps.append(Step(room_list[j], actions=step))
 
         return Command(instruction=self.instruction, steps=steps)
 
 
-
-
-
 def main(context: StatechartContext) -> GeneratedCommand:
+    instruction = "Bring the cup from the kitchen to the living room. Ask what the person in the kitchen what their favorite drink is."
     json_ms0_mock = """
-
-{
-  "messages": [
-    {
-      "role": "user",
-      "content": "Can you take butter from the storage rack and put it on the laundry room trashcan also please head to the book shelf then find the person pointing to the right and say your team's name also open the cupboard"
-    },
-    {
-      "role": "assistant",
-      "content": {
-        "plans": [
-          [
-            { "action": "say", "text": "I will pick up butter from the storage rack and put it on the laundry room trashcan" },
-            { "action": "navigate", "location": "kitchen" },
-            { "action": "pick_up", "object": "milk" },
-            { "action": "navigate", "location": "living room" }
-          ],
-          [
-            { "action": "say", "text": "I will go to the book shelf, find the person pointing to the right and tell them my team's name" },
-            { "action": "navigate", "location": "kitchen" },
-            { "action": "say", "text": "<team name>" }
-          ]
-        ]
-      }
-    }
-  ],
-  "rule_chains": [
-    "take_object_from_placement>place_object_on_placement",
-    "go_to_destination>find_described_person>tell_fact"
-  ]
-}
+{"plans":[[{"action":"say","text":"I will pick up the milk from the kitchen and put it on the table"},{"action":"navigate","location":"kitchen"},{"action":"pick_up","object":"milk"},{"action":"navigate","location":"table"},{"action":"place","object":"milk","location":"table"}],
+[{"action":"say","text":"I will find the person in the kitchen and ask what their favorite drink is"},{"action":"navigate","location":"kitchen"},{"action":"find","person":"person"},{"action":"say","text":"What is your favorite drink?"}]
+]}
     """
     json_string = """
 {
-  "messages": [
-    {
-      "role": "user",
-      "content": "Can you take butter from the storage rack and put it on the laundry room trashcan also please head to the book shelf then find the person pointing to the right and say your team's name also open the cupboard"
-    },
-    {
-      "role": "assistant",
-      "content": {
-        "plans": [
-          [
-            { "action": "say", "text": "I will pick up butter from the storage rack and put it on the laundry room trashcan" },
-            { "action": "navigate", "location": "storage rack" },
-            { "action": "pick_up", "object": "butter" },
-            { "action": "navigate", "location": "laundry room trashcan" },
-            { "action": "place", "object": "butter", "location": "laundry room trashcan" }
-          ],
-          [
-            { "action": "say", "text": "I will go to the book shelf, find the person pointing to the right and tell them my team's name" },
-            { "action": "navigate", "location": "book shelf" },
-            { "action": "find", "person": "person pointing to the right" },
-            { "action": "say", "text": "<team name>" }
-          ],
-          [
-            { "action": "say", "text": "I will open the cupboard" },
-            { "action": "navigate", "location": "cupboard" },
-            { "action": "open", "location": "cupboard" }
-          ]
-        ]
-      }
-    }
-  ],
-  "rule_chains": [
-    "take_object_from_placement>place_object_on_placement",
-    "go_to_destination>find_described_person>tell_fact",
-    "open_location"
+  "plans": [
+    [
+      { "action": "say", "text": "I will pick up butter from the storage rack and put it on the laundry room trashcan" },
+      { "action": "navigate", "location": "storage rack" },
+      { "action": "pick_up", "object": "butter" },
+      { "action": "navigate", "location": "laundry room trashcan" },
+      { "action": "place", "object": "butter", "location": "laundry room trashcan" }
+    ],
+    [
+      { "action": "say", "text": "I will go to the book shelf, find the person pointing to the right and tell them my team's name" },
+      { "action": "navigate", "location": "book shelf" },
+      { "action": "find", "person": "person pointing to the right" },
+      { "action": "say", "text": "<team name>" }
+    ],
+    [
+      { "action": "say", "text": "I will open the cupboard" },
+      { "action": "navigate", "location": "cupboard" },
+      { "action": "open", "location": "cupboard" }
+    ]
   ]
 }
 """
-    command = GeneratedCommand.from_json(json.loads(json_ms0_mock), context)
+    command = GeneratedCommand.from_json(
+        json.loads(json_ms0_mock), instruction, context
+    )
     for plan in command.plans:
-        print(plan.rule_chain)
         for action in plan.actions:
             print(
                 "  ",

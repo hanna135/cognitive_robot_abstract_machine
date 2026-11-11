@@ -22,7 +22,6 @@ from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.predefined_maps.kitchen_environment import KitchenEnvironment
 from semantic_digital_twin.robots.hsrb import HSRB
-from semantic_digital_twin.robots.pr2 import PR2
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Bedroom,
@@ -64,7 +63,6 @@ class SceneName(StrEnum):
     KITCHEN = "kitchen"
     LIVING_ROOM = "living_room"
     BED_ROOM = "bed_room"
-    OFFICE = "office"
     MILK = "milk"
     PERSON = "person"
 
@@ -105,11 +103,6 @@ class Person(Human):
     """
 
 
-@dataclass(eq=False)
-class Office(Room):
-    """
-    A room people work in at a desk.
-    """
 
 
 # %% Demonstration
@@ -138,7 +131,6 @@ class GeneratedCommandDemonstration(RobotDemonstration):
             SceneName.KITCHEN: Kitchen,
             SceneName.LIVING_ROOM: LivingRoom,
             SceneName.BED_ROOM: Bedroom,
-            SceneName.OFFICE: Office,
         }
     )
     """

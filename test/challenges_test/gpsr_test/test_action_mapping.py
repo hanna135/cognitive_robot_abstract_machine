@@ -10,11 +10,9 @@ from typing_extensions import Any
 from challenges.GPSR.action_mapping.action_mapping import (
     ActionType,
     GeneratedCommand,
-    MessageRole,
     PayloadKey,
     PlannedAction,
 )
-from challenges.GPSR.action_mapping.exceptions import MissingMessage
 
 
 # %% Fixtures
@@ -31,23 +29,6 @@ def payload() -> dict[str, Any]:
 
 
 # %% Parsing a generated command
-
-
-def test_instruction_is_the_user_message(payload: dict[str, Any]) -> None:
-    [user_message] = [
-        message
-        for message in payload[PayloadKey.MESSAGES]
-        if message[PayloadKey.ROLE] == MessageRole.USER
-    ]
-    command = GeneratedCommand.from_json(payload)
-    assert command.instruction == user_message[PayloadKey.CONTENT]
-
-
-def test_each_plan_keeps_its_rule_chain(payload: dict[str, Any]) -> None:
-    command = GeneratedCommand.from_json(payload)
-    assert [plan.rule_chain for plan in command.plans] == payload[
-        PayloadKey.RULE_CHAINS
-    ]
 
 
 def test_actions_keep_their_order_and_fields(payload: dict[str, Any]) -> None:
@@ -68,16 +49,6 @@ def test_actions_keep_their_order_and_fields(payload: dict[str, Any]) -> None:
             location="laundry room trashcan",
         ),
     ]
-
-
-def test_missing_assistant_message_is_reported(payload: dict[str, Any]) -> None:
-    payload[PayloadKey.MESSAGES] = [
-        message
-        for message in payload[PayloadKey.MESSAGES]
-        if message[PayloadKey.ROLE] != MessageRole.ASSISTANT
-    ]
-    with pytest.raises(MissingMessage):
-        GeneratedCommand.from_json(payload)
 
 
 def test_unknown_action_type_is_rejected() -> None:

@@ -32,7 +32,7 @@ class TalkingAction(SequentialAction):
     def create_steps(self) -> list[StatechartNode]:
         return [
             PublishOnStart(
-                topic_name=SpeechTopic.SPOKEN_TEXT,
+                topic_name="\tts_text",
                 msg=String(data=self.speaking_text),
             )
         ]

@@ -7,6 +7,7 @@ from krrood.exceptions import DataclassException
 from typing_extensions import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from krrood_spatial_math.spatial_types import Pose
     from challenges.GPSR.action_mapping.action_mapping import ActionType, PayloadKey
     from semantic_digital_twin.robots.robot_parts import EndEffector
     from semantic_digital_twin.semantic_annotations.mixins import (
@@ -50,18 +51,16 @@ class MissingActionArgument(DataclassException):
 class NoFreeTableInRoom(DataclassException):
     """Raised when no table in a room has space to put an object down on."""
 
-    room: Room
+    room_type: type[Room]
     """
-    The room the object was to be put down in.
+    The kind of room the object was to be put down in.
     """
 
     placed_object: HasRootBody
     """The object that was to be put down."""
 
     def error_message(self) -> str:
-        return (
-            f"No table in '{self.room.name}' has space for '{self.placed_object.name}'."
-        )
+        return f"No table in the {self.room_type.__name__} has space for '{self.placed_object.name}'."
 
     def suggest_correction(self) -> str:
         return (
@@ -91,6 +90,23 @@ class NoFreeSurface(DataclassException):
 
     def suggest_correction(self) -> str:
         return "Clear a surface of that kind, or name another placing location."
+
+
+@dataclass
+class NoStandingPoseOnFloor(DataclassException):
+    """Raised when the robot can reach a target only from poses that lie over
+    no floor."""
+
+    target_pose: Pose
+    """
+    The pose the robot was to reach.
+    """
+
+    def error_message(self) -> str:
+        return f"No pose over a floor lets the robot reach {self.target_pose}."
+
+    def suggest_correction(self) -> str:
+        return "Choose a target the robot can reach from inside the building."
 
 
 # %% Picking up

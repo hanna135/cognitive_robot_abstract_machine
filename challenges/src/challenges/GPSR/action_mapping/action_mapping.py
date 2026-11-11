@@ -12,6 +12,7 @@ from challenges.GPSR.action_mapping.exceptions import (
     NoFreeSurface,
     NoFreeTableInRoom,
     NoGraspFitsGripper,
+    NoStandingPoseOnFloor,
 )
 from challenges.semdt_helper_functions.find_class_by_name import (
     SemanticAnnotationClassFinder,
@@ -27,14 +28,25 @@ from coraplex.robot_plans.actions.composite.transporting import (
     MoveAndPlaceAction,
 )
 from coraplex.robot_plans.actions.composite.searching import SearchAction
-from coraplex.robot_plans.actions.core.navigation import NavigateAction
+from coraplex.robot_plans.actions.core.navigation import (
+    NavigateAction,
+    PathPlanningNavigateAction,
+)
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.talking import TalkingAction
 from coraplex.robot_plans.task_definitions import Command, Step
 from cramph.context import StatechartContext
+from krrood.entity_query_language.factories import a
 from krrood.entity_query_language.query.match import Match
+from krrood_spatial_math.spatial_types import Pose
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
+from semantic_digital_twin.reasoning.predicates import OverFloorPlan
+from semantic_digital_twin.reasoning.queries import (
+    find_free_space_in_room,
+    find_free_space_next_to,
+    find_objects_in_room,
+)
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.semantic_annotations.mixins import (
     HasGraspCandidates,
@@ -46,13 +58,10 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Kitchen,
     LivingRoom,
     Bedroom,
+    Floor,
     Table,
 )
-from semantic_digital_twin.spatial_types import (
-    HomogeneousTransformationMatrix,
-    Point3,
-    Pose,
-)
+
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import SemanticAnnotation
 
@@ -128,26 +137,20 @@ class PlannedAction:
         location_coordinates = None
         if location is not None:
             if isinstance(location, Room):
-                # location_coordinates = find_free_space_in_room(location, world)       # missing on this branch yet
-                location_coordinates = Pose.from_xyz_rpy(
-                    x=1, y=1, reference_frame=world.root
-                )  # placeholder
-                print("ROOM")
+                location_coordinates = find_free_space_in_room(semdt_type, world)
             else:
-                # location_coordinates = location.root.global_pose # use rodys query to find place near
-                location_coordinates = Pose.from_xyz_rpy(
-                    x=1, y=1, reference_frame=world.root
+                location_coordinates = find_free_space_next_to(
+                    robot_diameter=0.7, semantic_annotation=location
                 )
-                print("NOT ROOM", type[location])
 
         # -- OBJECT -----------------------------------------------------------------------------------------------------
         searched_object = None
         try:
-            if location is not None and data.get(PayloadKey.OBJECT) is not None:
-                # searched_object = find_objects_in_room(semdt_finder.find(data.get(PayloadKey.OBJECT)), location, world)[0]     # missing on this branch yet
-                searched_object = world.get_semantic_annotation_by_name(
-                    data.get(PayloadKey.OBJECT)
-                )  # placeholder
+            if isinstance(location, Room) and data.get(PayloadKey.OBJECT) is not None:
+                searched_object = find_objects_in_room(
+                    semdt_finder.find(data.get(PayloadKey.OBJECT)), semdt_type, world
+                )[0]
+
             elif data.get(PayloadKey.OBJECT) is not None:
                 searched_object = world.get_semantic_annotation_by_name(
                     data.get(PayloadKey.OBJECT)
@@ -171,8 +174,10 @@ class PlannedAction:
                 action = TalkingAction(speaking_text=data.get(PayloadKey.TEXT))
             case ActionType.NAVIGATE:  # DONE
                 if location_coordinates is None:
-                    raise Exception("Can't navigate if no location was given.")
-                action = NavigateAction(target_location=location_coordinates)
+                    raise MissingActionArgument(
+                        action=ActionType.NAVIGATE, argument=PayloadKey.LOCATION
+                    )
+                action = a(PathPlanningNavigateAction)(target=location_coordinates)
             case ActionType.PICK_UP:
                 action = cls.pick_up_from_reachable_standing_pose(
                     searched_object, context
@@ -188,7 +193,7 @@ class PlannedAction:
                     )
                 if isinstance(location, Room):
                     target_location = cls.free_pose_on_table_in_room(
-                        location, searched_object, world
+                        semdt_type, searched_object, world
                     )
                 elif isinstance(location, HasSupportingSurface):
                     target_location = cls.free_pose_on_first_free_surface(
@@ -206,12 +211,12 @@ class PlannedAction:
                 )
             case ActionType.FIND:
                 if searched_object is not None:
-                    action = NavigateAction(
-                        target_location=searched_object.root.global_pose
+                    action = a(PathPlanningNavigateAction)(
+                        target=searched_object.root.global_pose
                     )
                 elif searched_person is not None:
-                    action = NavigateAction(
-                        target_location=searched_person.root.global_pose
+                    action = a(PathPlanningNavigateAction)(
+                        target=searched_person.root.global_pose
                     )
                 else:
                     raise Exception("Nothing to find here.")
@@ -243,9 +248,14 @@ class PlannedAction:
         :raises NoGraspFitsGripper: If every grasp is wider than the gripper opens.
         """
         arm = context.require_extension(RobotAccess).robot.all_arms[0]
-        standing_pose = ReachabilityLocation(
-            target_pose=Pose(reference_frame=graspable.root), arm=arm, context=context
-        ).ground()
+        standing_pose = PlannedAction.standing_pose_on_floor(
+            ReachabilityLocation(
+                target_pose=Pose(reference_frame=graspable.root),
+                arm=arm,
+                context=context,
+            ),
+            context.world,
+        )
         grasps_closest_first = GraspsByCloseness(
             graspable, standing_pose, number_of_grasps=None
         )()
@@ -278,43 +288,47 @@ class PlannedAction:
             reachability costmap offers for ``target_location`` and puts it down there.
         """
         arm = context.require_extension(RobotAccess).robot.all_arms[0]
-        standing_pose = ReachabilityLocation(
-            target_pose=target_location, arm=arm, context=context
-        ).ground()
+        standing_pose = PlannedAction.standing_pose_on_floor(
+            ReachabilityLocation(target_pose=target_location, arm=arm, context=context),
+            context.world,
+        )
         return MoveAndPlaceAction.from_standing_position(
-            standing_pose, target_location, held_object
+            standing_pose, target_location, held_object, arm
         )
 
     @staticmethod
+    def standing_pose_on_floor(location: ReachabilityLocation, world: World) -> Pose:
+        """
+        :param location: Where the robot can stand to reach its target.
+        :param world: The world the robot stands in.
+        :return: The first candidate of ``location`` that lies over a floor.
+        :raises NoStandingPoseOnFloor: If no candidate lies over a floor.
+        """
+        floors = world.get_semantic_annotations_by_type(Floor)
+        for candidate in location:
+            if any(
+                OverFloorPlan(pose=candidate, floor=floor.root)() for floor in floors
+            ):
+                return candidate
+        raise NoStandingPoseOnFloor(target_pose=location.target_pose)
+
+    @staticmethod
     def free_pose_on_table_in_room(
-        room: Room, placed_object: HasRootBody, world: World
+        room_type: type[Room], placed_object: HasRootBody, world: World
     ) -> Pose:
         """
-        :param room: The room to put the object down in.
+        :param room_type: The kind of room to put the object down in.
         :param placed_object: The object to put down.
         :param world: The world the room is part of.
-        :return: A pose on the first table over the room's floor where the object
-            fits, as :meth:`free_pose_on_first_free_surface` samples it.
+        :return: A pose on the first table in the room where the object fits, as
+            :meth:`free_pose_on_first_free_surface` samples it.
         :raises NoFreeTableInRoom: If no table in the room has space for the object.
         """
-        floor_extent = room.floor.root.visual.as_bounding_box_collection_at_origin(
-            HomogeneousTransformationMatrix(reference_frame=world.root)
-        ).bounding_box()
-        tables_in_room = [
-            table
-            for table in world.get_semantic_annotations_by_type(Table)
-            if floor_extent.min_x
-            <= float(table.root.global_pose.x)
-            <= floor_extent.max_x
-            and floor_extent.min_y
-            <= float(table.root.global_pose.y)
-            <= floor_extent.max_y
-        ]
         free_pose = PlannedAction.free_pose_on_first_free_surface(
-            tables_in_room, placed_object
+            find_objects_in_room(Table, room_type, world), placed_object
         )
         if free_pose is None:
-            raise NoFreeTableInRoom(room=room, placed_object=placed_object)
+            raise NoFreeTableInRoom(room_type=room_type, placed_object=placed_object)
         return free_pose
 
     @staticmethod

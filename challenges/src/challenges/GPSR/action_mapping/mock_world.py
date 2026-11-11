@@ -1,15 +1,16 @@
-"""
-The kitchen the generated command of :func:`main` is mapped to actions in.
-"""
+"""The kitchen the generated command of :func:`main` is mapped to actions
+in."""
 
 from __future__ import annotations
 
 # %% Imports
 from dataclasses import dataclass, field, replace
+from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 
 import coraplex
+import mujoco
 from challenges.GPSR.action_mapping.action_mapping import main as action_main
 from coraplex.demonstrations import RobotDemonstration
 from coraplex.plans.context_extensions import RobotAccess
@@ -18,6 +19,7 @@ from cramph.composites import Sequence
 from cramph.context import ContextExtension, StatechartContext
 from cramph.statechart import Statechart
 from krrood.patterns.path_enumeration import PathEnumeration
+from semantic_digital_twin.adapters.multi_sim import MujocoSim, MujocoSynchronizer
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.predefined_maps.kitchen_environment import KitchenEnvironment
@@ -25,14 +27,13 @@ from semantic_digital_twin.robots.hsrb import HSRB
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Bedroom,
-    Floor,
     Human,
     Kitchen,
     LivingRoom,
     Milk,
     Room,
 )
-from semantic_digital_twin.spatial_types import HomogeneousTransformationMatrix
+from krrood_spatial_math.spatial_types import HomogeneousTransformationMatrix
 from semantic_digital_twin.specifications.connections import (
     Connection6DoFSpecification,
 )
@@ -55,9 +56,8 @@ from semantic_digital_twin.world_description.world_entity import Body
 
 
 class SceneName(StrEnum):
-    """
-    The names of the scene's parts, as the kitchen and the generated command call them.
-    """
+    """The names of the scene's parts, as the kitchen and the generated command
+    call them."""
 
     COUNTER_TOP = "counter_top"
     KITCHEN = "kitchen"
@@ -68,9 +68,8 @@ class SceneName(StrEnum):
 
 
 class SceneFile(PathEnumeration):
-    """
-    The files the added objects are built from, under the coraplex resources.
-    """
+    """The files the added objects are built from, under the coraplex
+    resources."""
 
     MILK = (
         Path(coraplex.__file__).resolve().parents[2]
@@ -78,9 +77,7 @@ class SceneFile(PathEnumeration):
         / "objects"
         / "milk.stl"
     )
-    """
-    The mesh of the milk carton.
-    """
+    """The mesh of the milk carton."""
 
     PERSON = (
         Path(coraplex.__file__).resolve().parents[2]
@@ -88,21 +85,35 @@ class SceneFile(PathEnumeration):
         / "objects"
         / "box.urdf"
     )
-    """
-    A box standing in for the person's body.
-    """
-
+    """A box standing in for the person's body."""
 
 # %% Classes of the named objects
 
 
 @dataclass(eq=False)
 class Person(Human):
-    """
-    A person, named so that the generated command's ``"person"`` finds this class.
-    """
+    """A person, named so that the generated command's ``"person"`` finds this
+    class."""
 
 
+# %% Simulation
+
+
+class OncePerCallSyncedMujocoSim(MujocoSim):
+    """
+    A MuJoCo simulation that copies its state into the world once per call of
+    :meth:`step_simulation`.
+    """
+
+    def step_simulation(self, duration: timedelta) -> None:
+        """Differs from :meth:`MujocoSim.step_simulation` in copying the
+        physics back into the world only after the last physics step of the
+        call."""
+        last_step = timedelta(seconds=self.simulator.step_size)
+        self.synchronizer.sync_rate_hz = 0
+        super().step_simulation(duration - last_step)
+        self.synchronizer.sync_rate_hz = MujocoSynchronizer.UNTHROTTLED_SYNC_RATE_HZ
+        super().step_simulation(last_step)
 
 
 # %% Demonstration
@@ -126,6 +137,8 @@ class GeneratedCommandDemonstration(RobotDemonstration):
 
     collision_avoidance: bool = False
 
+    scene_joints_movable: bool = False
+
     room_types: dict[SceneName, type[Room]] = field(
         default_factory=lambda: {
             SceneName.KITCHEN: Kitchen,
@@ -133,44 +146,57 @@ class GeneratedCommandDemonstration(RobotDemonstration):
             SceneName.BED_ROOM: Bedroom,
         }
     )
-    """
-    The kind of each of the kitchen's rooms, by the room's name.
-    """
+    """The kind of each of the kitchen's rooms, by the room's name."""
+
+    friction_cone: mujoco.mjtCone = mujoco.mjtCone.mjCONE_ELLIPTIC
+    """The friction cone the contacts use; the elliptic cone keeps a held
+    carton from creeping between the fingers."""
+
+    impedance_ratio: float = 10.0
+    """How much harder sliding is than pressing in, as MuJoCo recommends for
+    grasping with an elliptic cone."""
+
+    no_slip_iterations: int = 10
+    """Passes spent removing the slip soft contacts leave, so a held carton
+    stays where the fingers hold it."""
 
     def scene_specification(self) -> WorldSpecification:
-        """
-        Never called: :meth:`build_scene` builds the kitchen directly, since
-        :class:`~semantic_digital_twin.predefined_maps.kitchen_environment.KitchenEnvironment`
-        builds a :class:`~semantic_digital_twin.world.World`, not a
-        :class:`WorldSpecification`.
-        """
+        """Never called: :meth:`build_scene` builds the kitchen directly, since
+        :class:`~semantic_digital_twin.predefined_maps.kitchen_environment.Kitc
+        henEnvironment` builds a :class:`~semantic_digital_twin.world.World`,
+        not a :class:`WorldSpecification`."""
         raise NotImplementedError
 
     def build_scene(self) -> World:
-        """
-        Differs from :meth:`RobotDemonstration.build_scene` in starting from the kitchen
-        instead of :meth:`scene_specification`, and in leaving its floors without
-        collision shapes.
-        """
-        scene = KitchenEnvironment().get_world()
+        """Differs from :meth:`RobotDemonstration.build_scene` in starting from
+        the kitchen instead of :meth:`scene_specification`."""
+        scene = KitchenEnvironment().create_world()
         self.populate_scene(scene)
-        # Each Floor is a flat, zero-volume marker of a room's extent, not a slab the
-        # robot keeps clear of, so collision avoidance would read it as an obstacle.
-        for floor in scene.get_semantic_annotations_by_type(Floor):
-            floor.root.collision = ShapeCollection(reference_frame=floor.root)
+        if not self.scene_joints_movable:
+            self.replace_joints_with_fixed_connections(scene)
         return scene
 
     def robot_specification(self) -> RobotSpecification:
         return RobotSpecification(self.used_robot)
 
+    def build_simulation(self, world: World) -> MujocoSim:
+        """Differs from :meth:`RobotDemonstration.build_simulation` in contacts
+        that let the gripper hold a carton, and in copying the physics into the
+        world once per tick, see :class:`OncePerCallSyncedMujocoSim`."""
+        return OncePerCallSyncedMujocoSim(
+            world=world,
+            headless=self.headless,
+            cone=self.friction_cone,
+            impratio=self.impedance_ratio,
+            noslip_iterations=self.no_slip_iterations,
+        )
+
     def is_scene_populated(self, world: World) -> bool:
         return world.is_kinematic_structure_entity_in_world_by_name(SceneName.MILK)
 
     def populate_scene(self, world: World) -> None:
-        """
-        Give the kitchen's rooms their kinds, stand the milk on the counter top and the
-        person in the kitchen room.
-        """
+        """Give the kitchen's rooms their kinds, stand the milk on the counter
+        top and the person in the kitchen room."""
         self.assign_room_types(world)
         self.place_milk(world)
         self.place_person(world)
@@ -179,9 +205,8 @@ class GeneratedCommandDemonstration(RobotDemonstration):
         return [RobotAccess(world.get_semantic_annotations_by_type(self.used_robot)[0])]
 
     def build_statechart(self, context: StatechartContext) -> Statechart:
-        """
-        Perform the actions of every plan of the generated command, one after another.
-        """
+        """Perform the actions of every plan of the generated command, one
+        after another."""
         command = action_main(context)
         statechart = Statechart(context=context)
         statechart.add_node(
@@ -196,9 +221,8 @@ class GeneratedCommandDemonstration(RobotDemonstration):
         return statechart
 
     def assign_room_types(self, world: World) -> None:
-        """
-        Replace each of the kitchen's untyped rooms named in :attr:`room_types` by a room
-        of its kind on the same floor.
+        """Replace each of the kitchen's untyped rooms named in
+        :attr:`room_types` by a room of its kind on the same floor.
 
         :param world: The kitchen.
         """
@@ -238,7 +262,9 @@ class GeneratedCommandDemonstration(RobotDemonstration):
             in place although the floors have no collision shapes. It has no collision
             shape of its own, so the robot drives through it.
         """
-        person_world = URDFParser.from_file(file_path=str(SceneFile.PERSON)).parse()
+        person_world = URDFParser.from_file(
+            file_path=str(SceneFile.PERSON)
+        ).create_world()
         person_body = person_world.root
         person_body.visual = ShapeCollection(
             shapes=[
@@ -265,10 +291,10 @@ class GeneratedCommandDemonstration(RobotDemonstration):
         return person
 
     def stand_on(self, body: Body, surface: Body, world: World) -> None:
-        """
-        Move ``body`` to :meth:`centred_standing_pose` on ``surface``.
+        """Move ``body`` to :meth:`centred_standing_pose` on ``surface``.
 
-        :param body: The body to move, attached to the world by a 6DoF connection.
+        :param body: The body to move, attached to the world by a 6DoF
+            connection.
         :param surface: The body to stand it on.
         :param world: The world both are in.
         """
@@ -300,12 +326,12 @@ class GeneratedCommandDemonstration(RobotDemonstration):
 
     @staticmethod
     def slide_to_front_edge(body: Body, surface: Body, world: World) -> None:
-        """
-        Slide ``body``, standing on ``surface``, along the y-axis until its side is flush
-        with the edge of ``surface`` facing the origin of the world, where the robot
-        starts.
+        """Slide ``body``, standing on ``surface``, along the y-axis until its
+        side is flush with the edge of ``surface`` facing the origin of the
+        world, where the robot starts.
 
-        :param body: The body to slide, attached to the world by a 6DoF connection.
+        :param body: The body to slide, attached to the world by a 6DoF
+            connection.
         :param surface: The body it stands on.
         :param world: The world both are in.
         """
@@ -324,13 +350,14 @@ class GeneratedCommandDemonstration(RobotDemonstration):
 
 
 def main(headless: bool = False) -> World:
-    """
-    Run the demonstration.
+    """Run the demonstration.
 
     :param headless: Whether the physics runs without a viewer.
     :return: The world the command was carried out in.
     """
-    return GeneratedCommandDemonstration(headless=headless).run()
+    return GeneratedCommandDemonstration(
+        scene_joints_movable=False, headless=headless
+    ).run()
 
 
 if __name__ == "__main__":

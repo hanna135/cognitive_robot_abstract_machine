@@ -2,6 +2,8 @@ from __future__ import annotations
 
 # %% Imports
 import json
+
+import numpy
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -20,20 +22,22 @@ from challenges.semdt_helper_functions.find_class_by_name import (
 
 
 from coraplex.locations.locations import ReachabilityLocation
+from coraplex.perception import RoboKudoQuery, RoboKudoQueryTask
 from coraplex.plans.context_extensions import RobotAccess, StatementGrounding
 from coraplex.querying.grasp_closeness import GraspsByCloseness
-from coraplex.robot_plans.actions.base import Action
+from coraplex.robot_plans.actions.base import Action, SequentialAction
 from coraplex.robot_plans.actions.composite.transporting import (
     MoveAndPickUpAction,
     MoveAndPlaceAction,
 )
 from coraplex.robot_plans.actions.composite.searching import SearchAction
-from coraplex.robot_plans.actions.core.navigation import NavigateAction
+from coraplex.robot_plans.actions.core.navigation import FaceAtAction, NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.talking import TalkingAction
 from coraplex.robot_plans.task_definitions import Command, Step
-from cramph.context import StatechartContext
+from cramph.context import ContextExtension, StatechartContext
+from cramph.node import StatechartNode
 from krrood.entity_query_language.query.match import Match
 from krrood_spatial_math.spatial_types import Pose
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
@@ -53,6 +57,7 @@ from semantic_digital_twin.semantic_annotations.mixins import (
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Room,
     Floor,
+    Human,
     Table,
 )
 
@@ -87,6 +92,74 @@ class ActionType(StrEnum):
     PLACE = "place"
     FIND = "find"
     OPEN = "open"
+
+
+class DetectedObjectType(StrEnum):
+    """
+    The kinds of object the robot asks its perception pipeline to detect.
+    """
+
+    HUMAN = "human"
+    """
+    A person, wherever they stand.
+    """
+
+
+# %% Perception
+
+
+@dataclass
+class PersonDetection(ContextExtension):
+    """
+    Lets a plan ask the perception pipeline to detect the person it found.
+    """
+
+    query: RoboKudoQuery
+    """
+    What the perception pipeline is asked once the robot faces a person.
+    """
+
+
+# %% Actions
+
+
+@dataclass(eq=False, repr=False, kw_only=True)
+class FindPersonAction(SequentialAction):
+    """
+    Drives to stand in front of a person, facing them, and, if a detection is given,
+    asks the perception pipeline to detect them.
+    """
+
+    person: Human
+    """
+    The person to find.
+    """
+
+    viewing_distance: float = 2.0
+    """
+    How far in front of the person the robot stands, in meters.
+    """
+
+    detection: RoboKudoQuery | None = None
+    """
+    What the perception pipeline is asked once the robot faces the person; ``None`` to
+    only drive in front of them.
+    """
+
+    def create_steps(self) -> list[StatechartNode]:
+        steps: list[StatechartNode] = [
+            NavigateAction(
+                target_location=Pose.from_xyz_rpy(
+                    x=self.viewing_distance,
+                    yaw=numpy.pi,
+                    reference_frame=self.person.root,
+                )
+            ),
+            FaceAtAction(target=Pose(reference_frame=self.person.root)),
+        ]
+        if self.detection is not None:
+            steps.append(RoboKudoQueryTask(query=self.detection))
+        return steps
 
 
 # %% Plans
@@ -240,8 +313,12 @@ class PlannedAction:
                         target_location=searched_object.root.global_pose
                     )
                 elif searched_person is not None:
-                    action = NavigateAction(
-                        target_location=searched_person.root.global_pose
+                    person_detection = context.get_extension(PersonDetection)
+                    action = FindPersonAction(
+                        person=searched_person,
+                        detection=(
+                            None if person_detection is None else person_detection.query
+                        ),
                     )
                 else:
                     raise Exception("Nothing to find here.")

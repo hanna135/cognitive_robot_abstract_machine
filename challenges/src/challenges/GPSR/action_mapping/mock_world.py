@@ -4,15 +4,23 @@ in."""
 from __future__ import annotations
 
 # %% Imports
-from dataclasses import dataclass, field, replace
+import threading
+import weakref
+from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import StrEnum
 from pathlib import Path
 
 import coraplex
 import mujoco
-from challenges.GPSR.action_mapping.action_mapping import main as action_main
+import numpy
+from challenges.GPSR.action_mapping.action_mapping import (
+    DetectedObjectType,
+    PersonDetection,
+    main as action_main,
+)
 from coraplex.demonstrations import RobotDemonstration
+from coraplex.perception import CameraFrameCapture, RoboKudoQuery
 from coraplex.plans.context_extensions import RobotAccess
 from coraplex.plans.executors import PhysicallySimulatedPlanExecutor, PlanExecutor
 from coraplex.robot_plans.transformation_by_room import RoomVisitPlanner
@@ -20,16 +28,21 @@ from cramph.composites import Sequence
 from cramph.context import ContextExtension, StatechartContext
 from cramph.statechart import Statechart
 from krrood.patterns.path_enumeration import PathEnumeration
+from robokudo.analysis_engine_process import AnalysisEngineProcess
+from robokudo.descriptors.camera_configs.config_hsr_ros2 import HsrRos2CameraConfig
+from robokudo.io.simulated_camera import SimulatedCameraPublisher
 from semantic_digital_twin.adapters.multi_sim import (
     ContactCategories,
+    MujocoCamera,
     MujocoGeom,
     MujocoSim,
     MujocoSynchronizer,
 )
+from semantic_digital_twin.adapters.package_resolver import SearchPathFileResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.predefined_maps.kitchen_environment import KitchenEnvironment
-from semantic_digital_twin.robots.hsrb import HSRB
+from semantic_digital_twin.robots.hsrb import HSRB, HSRBHeadRGBDCamera
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Bedroom,
@@ -54,8 +67,6 @@ from semantic_digital_twin.specifications.worlds import WorldSpecification
 from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.connections import FixedConnection
 from semantic_digital_twin.world_description.contact import ContactParameters
-from semantic_digital_twin.world_description.geometry import Color
-from semantic_digital_twin.world_description.shape_collection import ShapeCollection
 from semantic_digital_twin.world_description.world_entity import Body
 
 # %% Scene vocabulary
@@ -71,6 +82,8 @@ class SceneName(StrEnum):
     BED_ROOM = "bed_room"
     MILK = "milk"
     PERSON = "person"
+    HUMAN = "human"
+    """The body of the human model, as its URDF names it."""
 
 
 class SceneFile(PathEnumeration):
@@ -85,13 +98,14 @@ class SceneFile(PathEnumeration):
     )
     """The mesh of the milk carton."""
 
-    PERSON = (
+    HUMAN = (
         Path(coraplex.__file__).resolve().parents[2]
         / "resources"
         / "objects"
-        / "box.urdf"
+        / "human"
+        / "human.urdf"
     )
-    """A box standing in for the person's body."""
+    """The rigid human model, whose meshes lie beside it."""
 
 
 # %% Classes of the named objects
@@ -167,6 +181,25 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     """Passes spent removing the slip soft contacts leave, so a held carton
     stays where the fingers hold it."""
 
+    analysis_engine: AnalysisEngineProcess | None = None
+    """The perception pipeline the plan asks to detect people, or ``None`` to
+    find people without perception."""
+
+    query: RoboKudoQuery = field(
+        default_factory=lambda: RoboKudoQuery(object_type=DetectedObjectType.HUMAN)
+    )
+    """What the plan asks :attr:`analysis_engine` once the robot faces the
+    person."""
+
+    camera_configuration: HsrRos2CameraConfig = field(
+        default_factory=HsrRos2CameraConfig
+    )
+    """The topics and frames the head camera is published on, those of the real
+    HSR."""
+
+    camera_publisher: SimulatedCameraPublisher | None = field(init=False, default=None)
+    """Publishes the head camera while :attr:`analysis_engine` runs."""
+
     robot_body_contact_category: ContactCategories = ContactCategories(2)
     """The contact category of every part of the robot but its grippers, which
     collides with nothing outside that category."""
@@ -216,7 +249,9 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     def build_simulation(self, world: World) -> MujocoSim:
         """Differs from :meth:`RobotDemonstration.build_simulation` in contacts
         that let the gripper hold a carton, and in copying the physics into the
-        world once per tick, see :class:`OncePerCallSyncedMujocoSim`."""
+        world once per tick, see :class:`OncePerCallSyncedMujocoSim`, with a
+        camera mounted at the head's RGB-D camera."""
+        MujocoCamera.mount_hsr_head(world)
         return OncePerCallSyncedMujocoSim(
             world=world,
             headless=self.headless,
@@ -235,8 +270,49 @@ class GeneratedCommandDemonstration(RobotDemonstration):
         self.place_milk(world)
         self.place_person(world)
 
+    def start_simulation(self, world: World) -> None:
+        """Differs from :meth:`RobotDemonstration.start_simulation` in then
+        publishing the head camera and starting :attr:`analysis_engine`, if
+        any."""
+        super().start_simulation(world)
+        if self.analysis_engine is None:
+            return
+        [camera] = world.get_semantic_annotations_by_type(HSRBHeadRGBDCamera)
+        self.camera_publisher = SimulatedCameraPublisher(
+            camera=camera,
+            simulation=self.simulation,
+            node=self.ros_node,
+            topics=self.camera_configuration,
+            frames=self.camera_configuration,
+        )
+        self.analysis_engine.start()
+
     def build_context_extensions(self, world: World) -> list[ContextExtension]:
-        return [RobotAccess(world.get_semantic_annotations_by_type(self.used_robot)[0])]
+        extensions: list[ContextExtension] = [
+            RobotAccess(world.get_semantic_annotations_by_type(self.used_robot)[0])
+        ]
+        if self.camera_publisher is not None:
+            extensions.append(CameraFrameCapture(self.camera_publisher.publish))
+            extensions.append(PersonDetection(self.query))
+        return extensions
+
+    def tear_down(self) -> None:
+        """Differs from :meth:`RobotDemonstration.tear_down` in first waiting for
+        the viewer to be closed, if there is one, and stopping
+        :attr:`analysis_engine`, if it was started."""
+        viewer_window = (
+            None
+            if self.headless or self.simulation is None
+            else self.simulation.simulator.renderer._sim()
+        )
+        if viewer_window is not None:
+            viewer_window_destroyed = threading.Event()
+            weakref.finalize(viewer_window, viewer_window_destroyed.set)
+            del viewer_window
+            viewer_window_destroyed.wait()
+        if self.camera_publisher is not None:
+            self.analysis_engine.stop()
+        super().tear_down()
 
     def build_statechart(self, context: StatechartContext) -> Statechart:
         """Perform the actions of every plan of the generated command, room
@@ -302,34 +378,44 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     def place_person(self, world: World) -> Person:
         """
         :param world: The kitchen.
-        :return: A new red person fixed in the middle of the kitchen room, so it stays
-            in place although the floors have no collision shapes. It has no collision
-            shape of its own, so the robot drives through it.
+        :return: A new human standing in the middle of the kitchen room, facing the
+            origin of the world, where the robot starts. Nothing in the simulation
+            collides with the human.
         """
-        person_world = URDFParser.from_file(
-            file_path=str(SceneFile.PERSON)
+        human_world = URDFParser.from_file(
+            str(SceneFile.HUMAN),
+            path_resolver=SearchPathFileResolver(
+                root_directories=[str(SceneFile.HUMAN.parent)]
+            ),
         ).create_world()
-        person_body = person_world.root
-        person_body.visual = ShapeCollection(
-            shapes=[
-                replace(shape, color=Color.RED())
-                for shape in person_body.collision.shapes
-            ],
-            reference_frame=person_body,
-        )
         kitchen = world.get_semantic_annotation_by_name(SceneName.KITCHEN)
+        standing_position = self.centred_standing_pose(
+            human_world.root, kitchen.floor.root, world
+        ).position
+        x, y, z = (float(coordinate) for coordinate in standing_position.to_np()[:3])
         world.merge_world(
-            person_world,
+            human_world,
             root_connection=FixedConnection(
                 parent=world.root,
-                child=person_body,
-                parent_T_connection_expression=self.centred_standing_pose(
-                    person_body, kitchen.floor.root, world
+                child=human_world.root,
+                parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
+                    x=x,
+                    y=y,
+                    z=z,
+                    yaw=numpy.arctan2(-y, -x),
+                    reference_frame=world.root,
                 ),
             ),
         )
-        person_body.collision = ShapeCollection(reference_frame=person_body)
-        person = Person(root=person_body, name=PrefixedName(SceneName.PERSON))
+        human_body = world.get_body_by_name(SceneName.HUMAN)
+        for geometry in human_body.collision:
+            geometry.add_simulator_property(
+                MujocoGeom(
+                    contact_type=ContactCategories.NONE,
+                    contact_affinity=ContactCategories.NONE,
+                )
+            )
+        person = Person(root=human_body, name=PrefixedName(SceneName.PERSON))
         with world.modify_world():
             world.add_semantic_annotation(person)
         return person
@@ -393,14 +479,21 @@ class GeneratedCommandDemonstration(RobotDemonstration):
         body.parent_connection.origin = world_root_T_body
 
 
-def main(headless: bool = False) -> World:
+def main(headless: bool = False, perceives: bool = True) -> World:
     """Run the demonstration.
 
     :param headless: Whether the physics runs without a viewer.
+    :param perceives: Whether RoboKudo is started and asked to detect the person.
     :return: The world the command was carried out in.
     """
     return GeneratedCommandDemonstration(
-        scene_joints_movable=False, headless=headless
+        scene_joints_movable=False,
+        headless=headless,
+        analysis_engine=(
+            AnalysisEngineProcess(analysis_engine="human_detection", shows_views=False)
+            if perceives
+            else None
+        ),
     ).run()
 
 

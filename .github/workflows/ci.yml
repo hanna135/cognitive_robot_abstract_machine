@@ -45,11 +45,11 @@ jobs:
           - lib: physics_simulators
           - lib: robokudo
           - lib: segmind
+          - lib: cramspeech
           - lib: experiments
           - lib: krrood_spatial_math
           - lib: version
           - lib: cognitive_robot_abstract_machine
-          - lib: challenges
     uses: ./.github/workflows/ci_reusable.yml
     with:
       lib: ${{ matrix.lib }}

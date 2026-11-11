@@ -28,11 +28,13 @@ dependencies = [
   "krrood_spatial_math>=26.10.0",
   "ipykernel>=7.2.0",
   "lark-parser>=0.12.0",
-  "challenges>=26.10.0",
-  "tqdm",
+  "tqdm"
 ]
 
 [project.optional-dependencies]
+speech = [
+    "cramspeech",
+]
 dev = [
     "pytest>=7.0.0,<8.0.0",
     "pytest-asyncio>=0.23.0,<0.24.0",
@@ -96,8 +98,8 @@ members = [
   "robokudo",
   "experiments",
   "segmind",
-  "domain_models/krrood_spatial_math",
-  "challenges"
+  "cramspeech",
+  "domain_models/krrood_spatial_math"
 ]
 
 [tool.uv.sources]
@@ -111,9 +113,9 @@ random_events         = { workspace = true }
 robokudo              = { workspace = true }
 physics_simulators    = { workspace = true }
 segmind               = { workspace = true }
+cramspeech            = { workspace = true }
 experiments           = { workspace = true }
 krrood_spatial_math   = { workspace = true }
-challenges            = { workspace = true }
 
 [tool.poetry]
 package-mode = false
@@ -130,8 +132,8 @@ robokudo = { path = "robokudo", develop = true }
 physics_simulators = { path = "physics_simulators", develop = true }
 experiments = { path = "experiments", develop = true }
 segmind = { path = "segmind", develop = true }
+cramspeech = { path = "cramspeech", develop = true, optional = true }
 krrood_spatial_math = { path = "domain_models/krrood_spatial_math", develop = true }
-challenges = { path = "challenges", develop = true }
 
 [tool.setuptools]
 packages = ["cognitive_robot_abstract_machine"]

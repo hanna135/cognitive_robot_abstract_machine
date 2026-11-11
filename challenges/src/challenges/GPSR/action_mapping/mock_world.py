@@ -19,7 +19,12 @@ from cramph.composites import Sequence
 from cramph.context import ContextExtension, StatechartContext
 from cramph.statechart import Statechart
 from krrood.patterns.path_enumeration import PathEnumeration
-from semantic_digital_twin.adapters.multi_sim import MujocoSim, MujocoSynchronizer
+from semantic_digital_twin.adapters.multi_sim import (
+    ContactCategories,
+    MujocoGeom,
+    MujocoSim,
+    MujocoSynchronizer,
+)
 from semantic_digital_twin.adapters.urdf import URDFParser
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.predefined_maps.kitchen_environment import KitchenEnvironment
@@ -160,6 +165,10 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     """Passes spent removing the slip soft contacts leave, so a held carton
     stays where the fingers hold it."""
 
+    robot_body_contact_category: ContactCategories = ContactCategories(2)
+    """The contact category of every part of the robot but its grippers, which
+    collides with nothing outside that category."""
+
     def scene_specification(self) -> WorldSpecification:
         """Never called: :meth:`build_scene` builds the kitchen directly, since
         :class:`~semantic_digital_twin.predefined_maps.kitchen_environment.Kitc
@@ -178,6 +187,29 @@ class GeneratedCommandDemonstration(RobotDemonstration):
 
     def robot_specification(self) -> RobotSpecification:
         return RobotSpecification(self.used_robot)
+
+    def build_simulated_world(self) -> World:
+        """Differs from :meth:`RobotDemonstration.build_simulated_world` in
+        letting every part of the robot but its grippers pass through the
+        scene."""
+        world = super().build_simulated_world()
+        robot = world.get_semantic_annotations_by_type(self.used_robot)[0]
+        gripper_bodies = {
+            body
+            for arm in robot.all_arms
+            for body in arm.end_effector.bodies_with_collision
+        }
+        for body in robot.bodies_with_collision:
+            if body in gripper_bodies:
+                continue
+            for geometry in body.collision:
+                geometry.add_simulator_property(
+                    MujocoGeom(
+                        contact_type=self.robot_body_contact_category,
+                        contact_affinity=self.robot_body_contact_category,
+                    )
+                )
+        return world
 
     def build_simulation(self, world: World) -> MujocoSim:
         """Differs from :meth:`RobotDemonstration.build_simulation` in contacts

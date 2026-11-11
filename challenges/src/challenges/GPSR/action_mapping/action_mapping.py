@@ -28,16 +28,12 @@ from coraplex.robot_plans.actions.composite.transporting import (
     MoveAndPlaceAction,
 )
 from coraplex.robot_plans.actions.composite.searching import SearchAction
-from coraplex.robot_plans.actions.core.navigation import (
-    NavigateAction,
-    PathPlanningNavigateAction,
-)
+from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.talking import TalkingAction
 from coraplex.robot_plans.task_definitions import Command, Step
 from cramph.context import StatechartContext
-from krrood.entity_query_language.factories import a
 from krrood.entity_query_language.query.match import Match
 from krrood_spatial_math.spatial_types import Pose
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
@@ -177,7 +173,7 @@ class PlannedAction:
                     raise MissingActionArgument(
                         action=ActionType.NAVIGATE, argument=PayloadKey.LOCATION
                     )
-                action = a(PathPlanningNavigateAction)(target=location_coordinates)
+                action = NavigateAction(target_location=location_coordinates)
             case ActionType.PICK_UP:
                 action = cls.pick_up_from_reachable_standing_pose(
                     searched_object, context
@@ -211,12 +207,12 @@ class PlannedAction:
                 )
             case ActionType.FIND:
                 if searched_object is not None:
-                    action = a(PathPlanningNavigateAction)(
-                        target=searched_object.root.global_pose
+                    action = NavigateAction(
+                        target_location=searched_object.root.global_pose
                     )
                 elif searched_person is not None:
-                    action = a(PathPlanningNavigateAction)(
-                        target=searched_person.root.global_pose
+                    action = NavigateAction(
+                        target_location=searched_person.root.global_pose
                     )
                 else:
                     raise Exception("Nothing to find here.")

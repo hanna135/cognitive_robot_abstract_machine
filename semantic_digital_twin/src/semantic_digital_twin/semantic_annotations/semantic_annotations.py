@@ -780,8 +780,10 @@ class Bathroom(Room): ...
 @dataclass(eq=False)
 class LivingRoom(Room): ...
 
+
 @dataclass(eq=False)
 class Office(Room): ...
+
 
 @dataclass(eq=False)
 class Level(HasRootRegion):
@@ -1598,18 +1600,24 @@ class SemanticEnvironmentAnnotation(HasRootBody):
         """
         Collect the obstacle bodies to consider within ``search_space``.
 
-        Filters out robot bodies so a robot does not treat itself as an obstacle, and
-        bodies without meaningful collision geometry.
+        Filters out robot bodies so a robot does not treat itself as an obstacle, the
+        bodies a robot's gripper encloses so it does not treat what it holds as one
+        either, and bodies without meaningful collision geometry.
 
         :param search_space: The search space; its reference frame is used to look up
             the owning world.
         :return: The obstacle bodies to consider.
         """
         world = search_space.reference_frame._world
-        return [
+        robots = set(world.robot_body_to_robot_mapping.values())
+        carried_bodies = set(world.robot_bodies_with_collision) | {
             body
-            for body in self.bodies_with_collision
-            if body not in world.robot_bodies_with_collision
+            for robot in robots
+            for end_effector in robot.all_end_effectors
+            for body in end_effector.enclosed_bodies
+        }
+        return [
+            body for body in self.bodies_with_collision if body not in carried_bodies
         ]
 
     def build_bloated_obstacle_collection(

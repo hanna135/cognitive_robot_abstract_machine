@@ -10,7 +10,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing_extensions import TYPE_CHECKING
+from typing_extensions import TYPE_CHECKING, Any
 
 import cv2
 from geometry_msgs.msg import TransformStamped
@@ -208,6 +208,13 @@ class SimulatedCameraPublisher:
             camera_info=camera_info,
             camera_transform=camera_transform,
         )
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> SimulatedCameraPublisher:
+        """
+        :return: This publisher itself: a copy publishes from the same running
+            simulation through the same ROS node, neither of which can be copied.
+        """
+        return self
 
     def publish(self) -> None:
         """

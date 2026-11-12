@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from typing_extensions import Any
 
+from challenges.GPSR.action_mapping.exceptions import ObjectNotInRoom
 from challenges.GPSR.action_mapping.action_mapping import (
     ActionType,
     GeneratedCommand,
@@ -14,7 +15,9 @@ from challenges.GPSR.action_mapping.action_mapping import (
     PayloadKey,
     PlannedAction,
 )
+from coraplex.robot_plans.actions.core.navigation import NavigateAction
 from coraplex.robot_plans.actions.core.talking import TalkingAction
+from cramph.context import StatechartContext
 from coraplex.robot_plans.transformation_by_room import RoomVisitPlanner
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
@@ -23,6 +26,7 @@ from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     LivingRoom,
     Room,
 )
+from semantic_digital_twin.world import World
 from semantic_digital_twin.world_description.world_entity import Body
 
 
@@ -37,6 +41,14 @@ def payload() -> dict[str, Any]:
     return json.loads(
         (Path(__file__).parent / "resources" / "generated_command.json").read_text()
     )
+
+
+@pytest.fixture
+def context(kitchen_environment_with_rooms: World) -> StatechartContext:
+    """
+    A context whose world has a kitchen and a living room for the steps to name.
+    """
+    return StatechartContext(world=kitchen_environment_with_rooms)
 
 
 @pytest.fixture
@@ -83,29 +95,74 @@ def saying(text: str, location: Room | None = None) -> PlannedAction:
 # %% Parsing a generated command
 
 
-def test_actions_keep_their_order_and_fields(payload: dict[str, Any]) -> None:
-    command = GeneratedCommand.from_json(payload)
-    assert command.plans[0].actions == [
-        PlannedAction(
-            action_type=ActionType.SAY,
-            text="I will pick up butter from the storage rack and put it on the laundry room trashcan",
-        ),
-        PlannedAction(action_type=ActionType.NAVIGATE, location="storage rack"),
-        PlannedAction(action_type=ActionType.PICK_UP, object_name="butter"),
-        PlannedAction(
-            action_type=ActionType.NAVIGATE, location="laundry room trashcan"
-        ),
-        PlannedAction(
-            action_type=ActionType.PLACE,
-            object_name="butter",
-            location="laundry room trashcan",
-        ),
+def test_actions_keep_their_order_and_fields(
+    payload: dict[str, Any], context: StatechartContext
+) -> None:
+    command = GeneratedCommand.from_json(payload, "go there", context)
+    [plan] = command.plans
+    say = payload[PayloadKey.PLANS][0][0]
+    [kitchen_room] = context.world.get_semantic_annotations_by_type(Kitchen)
+    [living_room_room] = context.world.get_semantic_annotations_by_type(LivingRoom)
+    assert [type(action.action_type) for action in plan.actions] == [
+        TalkingAction,
+        NavigateAction,
+        NavigateAction,
+    ]
+    assert plan.actions[0].action_type.speaking_text == say[PayloadKey.TEXT]
+    assert [action.location for action in plan.actions] == [
+        None,
+        kitchen_room,
+        living_room_room,
     ]
 
 
-def test_unknown_action_type_is_rejected() -> None:
-    with pytest.raises(ValueError):
-        PlannedAction.from_json({PayloadKey.ACTION: "dance"})
+def test_action_kind_not_mapped_yet_has_no_action(context: StatechartContext) -> None:
+    action = PlannedAction.from_json({PayloadKey.ACTION: ActionType.OPEN}, context)
+    assert action.action_type is None
+
+
+# %% Finding the object a step names
+
+
+def test_object_to_place_is_found_outside_the_target_room(
+    kitchen_environment_with_rooms: World,
+) -> None:
+    [living_room_room] = (
+        kitchen_environment_with_rooms.get_semantic_annotations_by_type(LivingRoom)
+    )
+    apple = kitchen_environment_with_rooms.get_semantic_annotation_by_name("apple")
+    found = PlannedAction.find_object_annotation(
+        "apple", ActionType.PLACE, living_room_room, kitchen_environment_with_rooms
+    )
+    assert found is apple
+
+
+def test_object_to_pick_up_is_found_in_the_named_room(
+    kitchen_environment_with_rooms: World,
+) -> None:
+    [kitchen_room] = kitchen_environment_with_rooms.get_semantic_annotations_by_type(
+        Kitchen
+    )
+    apple = kitchen_environment_with_rooms.get_semantic_annotation_by_name("apple")
+    found = PlannedAction.find_object_annotation(
+        "apple", ActionType.PICK_UP, kitchen_room, kitchen_environment_with_rooms
+    )
+    assert found is apple
+
+
+def test_object_to_pick_up_missing_from_the_named_room_raises(
+    kitchen_environment_with_rooms: World,
+) -> None:
+    [living_room_room] = (
+        kitchen_environment_with_rooms.get_semantic_annotations_by_type(LivingRoom)
+    )
+    with pytest.raises(ObjectNotInRoom):
+        PlannedAction.find_object_annotation(
+            "apple",
+            ActionType.PICK_UP,
+            living_room_room,
+            kitchen_environment_with_rooms,
+        )
 
 
 # %% Rewrapping a plan into a command for the room transformation

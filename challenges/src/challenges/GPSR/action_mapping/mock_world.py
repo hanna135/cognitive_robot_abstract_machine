@@ -4,6 +4,7 @@ in."""
 from __future__ import annotations
 
 # %% Imports
+import json
 import threading
 import weakref
 from dataclasses import dataclass, field
@@ -19,6 +20,12 @@ from challenges.GPSR.action_mapping.action_mapping import (
     PersonDetection,
     main as action_main,
 )
+from pathlib import Path
+
+from cramspeech.inference.plan_model import PlanModel
+from cramspeech.microphone import Microphone
+from cramspeech.speech_recognizer import SpeechRecognizer
+from cramspeech.transcription import WhisperTranscriber
 from coraplex.demonstrations import RobotDemonstration
 from coraplex.perception import CameraFrameCapture, RoboKudoQuery
 from coraplex.plans.context_extensions import RobotAccess
@@ -204,6 +211,12 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     """The contact category of every part of the robot but its grippers, which
     collides with nothing outside that category."""
 
+    json_plan: str = ""
+
+    person_distance_behind_kitchen_centre: float = 1.0
+    """How far, in m, the human stands behind the middle of the kitchen floor,
+    seen from the origin of the world, where the robot starts."""
+
     def scene_specification(self) -> WorldSpecification:
         """Never called: :meth:`build_scene` builds the kitchen directly, since
         :class:`~semantic_digital_twin.predefined_maps.kitchen_environment.Kitc
@@ -319,7 +332,7 @@ class GeneratedCommandDemonstration(RobotDemonstration):
         visit by room visit, in the order :meth:`~coraplex.robot_plans.transfor
         mation_by_room.RoomVisitPlanner.transform_plan_by_rooms` orders them
         into."""
-        generated_command = action_main(context)
+        generated_command = action_main(context, self.json_plan)
         any_room = {
             type(room) for room in context.world.get_semantic_annotations_by_type(Room)
         }
@@ -378,9 +391,10 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     def place_person(self, world: World) -> Person:
         """
         :param world: The kitchen.
-        :return: A new human standing in the middle of the kitchen room, facing the
-            origin of the world, where the robot starts. Nothing in the simulation
-            collides with the human.
+        :return: A new human standing
+            :attr:`person_distance_behind_kitchen_centre` behind the middle of the
+            kitchen room, facing the origin of the world, where the robot starts.
+            Nothing in the simulation collides with the human.
         """
         human_world = URDFParser.from_file(
             str(SceneFile.HUMAN),
@@ -393,6 +407,8 @@ class GeneratedCommandDemonstration(RobotDemonstration):
             human_world.root, kitchen.floor.root, world
         ).position
         x, y, z = (float(coordinate) for coordinate in standing_position.to_np()[:3])
+        scale = 1 + self.person_distance_behind_kitchen_centre / numpy.hypot(x, y)
+        x, y = x * scale, y * scale
         world.merge_world(
             human_world,
             root_connection=FixedConnection(
@@ -486,9 +502,24 @@ def main(headless: bool = False, perceives: bool = True) -> World:
     :param perceives: Whether RoboKudo is started and asked to detect the person.
     :return: The world the command was carried out in.
     """
+    recognizer = SpeechRecognizer(
+        microphone=Microphone(), transcriber=WhisperTranscriber()
+    )
+    plan_model = PlanModel(
+        model_path=Path("/home/hanna/SUTURO_Master/nlp_llm/plan-q4.gguf")
+    )
+
+    print("SPEAK NOW...................")
+    transcript = recognizer.hear_next_utterance(timeout=30.0)
+    instruction_plans = plan_model.write_plans(transcript.text)
+
+    json_plan = json.dumps(instruction_plans.to_json(), separators=(",", ":"))
+    print(json_plan)
+
     return GeneratedCommandDemonstration(
         scene_joints_movable=False,
         headless=headless,
+        json_plan=json_plan,
         analysis_engine=(
             AnalysisEngineProcess(analysis_engine="human_detection", shows_views=False)
             if perceives

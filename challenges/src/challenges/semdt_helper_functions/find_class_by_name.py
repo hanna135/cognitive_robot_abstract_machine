@@ -6,12 +6,11 @@ from dataclasses import dataclass
 
 from krrood.utils import recursive_subclasses
 
-# Imported so that every semantic annotation class is defined before the lookup.
-import semantic_digital_twin.semantic_annotations.semantic_annotations  # noqa: F401
 from challenges.semdt_helper_functions.exceptions import (
     AmbiguousSemanticAnnotationName,
     UnknownSemanticAnnotationName,
 )
+from semantic_digital_twin.semantic_annotations.semantic_annotations import Room
 from semantic_digital_twin.world_description.world_entity import SemanticAnnotation
 
 
@@ -43,23 +42,81 @@ class SemanticAnnotationClassFinder:
         :raises AmbiguousSemanticAnnotationName: If several classes have that name, or
             none has it and several concrete classes contain it.
         """
+        return self.select_single_match(
+            name, self.classes_named(name) or self.concrete_classes_containing(name)
+        )
+
+    def find_place(self, name: str) -> type[SemanticAnnotation]:
+        """
+        Differs from :meth:`find` in that a name no class has exactly, but that contains
+        the name of a room, refers to that room, such as ``"living room table"`` for
+        :class:`LivingRoom`.
+
+        :param name: The name of a place, such as ``"kitchen"`` or ``"living room
+            table"``.
+        :raises AmbiguousSemanticAnnotationName: If the name contains several room
+            names.
+        """
+        return self.select_single_match(
+            name,
+            self.classes_named(name)
+            or self.rooms_named_in(name)
+            or self.concrete_classes_containing(name),
+        )
+
+    def classes_named(self, name: str) -> set[type[SemanticAnnotation]]:
+        """
+        :param name: The name of an object.
+        :return: The semantic annotation classes with exactly that name.
+        """
         normalized_name = self.normalize(name)
-        annotation_classes = recursive_subclasses(SemanticAnnotation)
-        matches = {
+        return {
             annotation_class
-            for annotation_class in annotation_classes
+            for annotation_class in recursive_subclasses(SemanticAnnotation)
             if self.normalize(annotation_class.__name__) == normalized_name
-        } or {
+        }
+
+    def concrete_classes_containing(self, name: str) -> set[type[SemanticAnnotation]]:
+        """
+        :param name: The name of an object.
+        :return: The concrete semantic annotation classes whose name contains it.
+        """
+        normalized_name = self.normalize(name)
+        return {
             annotation_class
-            for annotation_class in annotation_classes
+            for annotation_class in recursive_subclasses(SemanticAnnotation)
             if normalized_name in self.normalize(annotation_class.__name__)
             and not inspect.isabstract(annotation_class)
         }
+
+    def rooms_named_in(self, name: str) -> set[type[Room]]:
+        """
+        :param name: The name of a place.
+        :return: The concrete room classes whose name the place's name contains.
+        """
+        normalized_name = self.normalize(name)
+        return {
+            room_class
+            for room_class in recursive_subclasses(Room)
+            if self.normalize(room_class.__name__) in normalized_name
+            and not inspect.isabstract(room_class)
+        }
+
+    def select_single_match(
+        self, name: str, matches: set[type[SemanticAnnotation]]
+    ) -> type[SemanticAnnotation]:
+        """
+        :param name: The name the classes were found for.
+        :param matches: The classes found for the name.
+        :return: The only class found.
+        :raises UnknownSemanticAnnotationName: If no class was found.
+        :raises AmbiguousSemanticAnnotationName: If several classes were found.
+        """
         if not matches:
             raise UnknownSemanticAnnotationName(name=name)
         if len(matches) > 1:
             raise AmbiguousSemanticAnnotationName(name=name, matches=list(matches))
-        return matches.pop()
+        return next(iter(matches))
 
     def normalize(self, name: str) -> str:
         """

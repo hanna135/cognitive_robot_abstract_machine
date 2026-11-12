@@ -15,7 +15,10 @@ from challenges.semdt_helper_functions.find_class_by_name import (
 )
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     DrinkingContainer,
+    KitchenIsland,
+    LivingRoom,
     Milk,
+    Room,
 )
 from semantic_digital_twin.world_description.world_entity import SemanticAnnotation
 
@@ -97,6 +100,41 @@ def test_name_contained_in_two_class_names_raises(
     with pytest.raises(AmbiguousSemanticAnnotationName) as raised:
         finder.find("twice contained")
     assert set(raised.value.matches) == {TwiceContainedLeft, TwiceContainedRight}
+
+
+# %% Places named after their room
+
+
+def test_place_containing_a_room_name_finds_the_room(
+    finder: SemanticAnnotationClassFinder,
+):
+    assert finder.find_place("living room table") is LivingRoom
+
+
+def test_exact_name_of_a_place_wins_over_the_room_it_contains(
+    finder: SemanticAnnotationClassFinder,
+):
+    assert finder.find_place("kitchen island") is KitchenIsland
+
+
+def test_place_without_a_room_name_finds_class_like_find(
+    finder: SemanticAnnotationClassFinder,
+):
+    assert finder.find_place("milk") is finder.find("milk")
+
+
+def test_place_containing_two_room_names_raises(
+    finder: SemanticAnnotationClassFinder,
+):
+    @dataclass(eq=False)
+    class FirstProbeSuite(Room): ...
+
+    @dataclass(eq=False)
+    class SecondProbeSuite(Room): ...
+
+    with pytest.raises(AmbiguousSemanticAnnotationName) as raised:
+        finder.find_place("first probe suite second probe suite")
+    assert set(raised.value.matches) == {FirstProbeSuite, SecondProbeSuite}
 
 
 # %% Failures

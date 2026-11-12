@@ -15,6 +15,7 @@ from challenges.GPSR.action_mapping.exceptions import (
     NoFreeTableInRoom,
     NoGraspFitsGripper,
     NoStandingPoseOnFloor,
+    ObjectNotInRoom,
 )
 from challenges.semdt_helper_functions.find_class_by_name import (
     SemanticAnnotationClassFinder,
@@ -225,7 +226,7 @@ class PlannedAction:
         action = None
         semdt_finder = SemanticAnnotationClassFinder()
         if data.get(PayloadKey.LOCATION) is not None:
-            semdt_type = semdt_finder.find(data.get(PayloadKey.LOCATION))
+            semdt_type = semdt_finder.find_place(data.get(PayloadKey.LOCATION))
             print(semdt_type)
             location = world.get_semantic_annotations_by_type(semdt_type)[0]
         else:
@@ -242,23 +243,13 @@ class PlannedAction:
                 )
 
         # -- OBJECT -----------------------------------------------------------------------------------------------------
-        searched_object = None
-        try:
-            if isinstance(location, Room) and data.get(PayloadKey.OBJECT) is not None:
-                searched_object = find_objects_in_room(
-                    semdt_finder.find(data.get(PayloadKey.OBJECT)), semdt_type, world
-                )[0]
-
-            elif data.get(PayloadKey.OBJECT) is not None:
-                searched_object = world.get_semantic_annotation_by_name(
-                    data.get(PayloadKey.OBJECT)
-                )
-                # location = find_objects_room(searched_object)     # missing on this branch yet
-
-        except Exception as e:
-            raise Exception(
-                "object seems not to be in the world already, Search Action needs to be implemented to find it."
+        searched_object = (
+            None
+            if data.get(PayloadKey.OBJECT) is None
+            else cls.find_object_annotation(
+                data[PayloadKey.OBJECT], data[PayloadKey.ACTION], location, world
             )
+        )
 
         # -- PERSON -----------------------------------------------------------------------------------------------------
         searched_person = None
@@ -335,6 +326,30 @@ class PlannedAction:
             object_annotation=searched_object,
             person=data.get(PayloadKey.PERSON),
         )
+
+    @staticmethod
+    def find_object_annotation(
+        object_name: str,
+        action: ActionType,
+        location: SemanticAnnotation | None,
+        world: World,
+    ) -> HasRootBody:
+        """
+        :param object_name: The name of the object as the step names it.
+        :param action: The kind of action the step performs.
+        :param location: The place the step names.
+        :param world: The world holding the object.
+        :return: The object the step names: the first of its kind in the room the step
+            names, unless the step places it there; else the one with that name.
+        :raises ObjectNotInRoom: If the room holds no object of that kind.
+        """
+        if not isinstance(location, Room) or action == ActionType.PLACE:
+            return world.get_semantic_annotation_by_name(object_name)
+        object_type = SemanticAnnotationClassFinder().find(object_name)
+        objects_in_room = find_objects_in_room(object_type, type(location), world)
+        if not objects_in_room:
+            raise ObjectNotInRoom(object_type=object_type, room=location)
+        return objects_in_room[0]
 
     @staticmethod
     def pick_up_from_reachable_standing_pose(
@@ -538,40 +553,38 @@ class GeneratedCommand:
         )
 
 
-def main(context: StatechartContext) -> GeneratedCommand:
+def main(context: StatechartContext, json_plan: str) -> GeneratedCommand:
     instruction = "Bring the cup from the kitchen to the living room. Ask what the person in the kitchen what their favorite drink is."
-    json_ms0_mock = """
-{"plans":[[{"action":"say","text":"I will pick up the milk from the kitchen and put it on the table"},{"action":"navigate","location":"kitchen"},{"action":"pick_up","object":"milk"},{"action":"navigate","location":"table"},{"action":"place","object":"milk","location":"table"}],
-[{"action":"say","text":"I will find the person in the kitchen and ask what their favorite drink is"},{"action":"navigate","location":"kitchen"},{"action":"find","person":"person"},{"action":"say","text":"What is your favorite drink?"}]
-]}
-    """
-    json_string = """
-{
-  "plans": [
-    [
-      { "action": "say", "text": "I will pick up butter from the storage rack and put it on the laundry room trashcan" },
-      { "action": "navigate", "location": "storage rack" },
-      { "action": "pick_up", "object": "butter" },
-      { "action": "navigate", "location": "laundry room trashcan" },
-      { "action": "place", "object": "butter", "location": "laundry room trashcan" }
-    ],
-    [
-      { "action": "say", "text": "I will go to the book shelf, find the person pointing to the right and tell them my team's name" },
-      { "action": "navigate", "location": "book shelf" },
-      { "action": "find", "person": "person pointing to the right" },
-      { "action": "say", "text": "<team name>" }
-    ],
-    [
-      { "action": "say", "text": "I will open the cupboard" },
-      { "action": "navigate", "location": "cupboard" },
-      { "action": "open", "location": "cupboard" }
-    ]
-  ]
-}
-"""
-    command = GeneratedCommand.from_json(
-        json.loads(json_ms0_mock), instruction, context
-    )
+    #     json_ms0_mock = """
+    # {"plans":[[{"action":"say","text":"I will pick up the milk from the kitchen and put it on the table"},{"action":"navigate","location":"kitchen"},{"action":"pick_up","object":"milk"},{"action":"navigate","location":"table"},{"action":"place","object":"milk","location":"table"}],
+    # [{"action":"say","text":"I will find the person in the kitchen and ask what their favorite drink is"},{"action":"navigate","location":"kitchen"},{"action":"find","person":"person"},{"action":"say","text":"What is your favorite drink?"}]
+    # ]}
+    #     """
+    #     json_string = """
+    # {
+    #   "plans": [
+    #     [
+    #       { "action": "say", "text": "I will pick up butter from the storage rack and put it on the laundry room trashcan" },
+    #       { "action": "navigate", "location": "storage rack" },
+    #       { "action": "pick_up", "object": "butter" },
+    #       { "action": "navigate", "location": "laundry room trashcan" },
+    #       { "action": "place", "object": "butter", "location": "laundry room trashcan" }
+    #     ],
+    #     [
+    #       { "action": "say", "text": "I will go to the book shelf, find the person pointing to the right and tell them my team's name" },
+    #       { "action": "navigate", "location": "book shelf" },
+    #       { "action": "find", "person": "person pointing to the right" },
+    #       { "action": "say", "text": "<team name>" }
+    #     ],
+    #     [
+    #       { "action": "say", "text": "I will open the cupboard" },
+    #       { "action": "navigate", "location": "cupboard" },
+    #       { "action": "open", "location": "cupboard" }
+    #     ]
+    #   ]
+    # }
+    # """
+    command = GeneratedCommand.from_json(json.loads(json_plan), instruction, context)
     for plan in command.plans:
         for action in plan.actions:
             print(

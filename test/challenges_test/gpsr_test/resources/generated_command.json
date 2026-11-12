@@ -3,56 +3,15 @@
     [
       {
         "action": "say",
-        "text": "I will pick up butter from the storage rack and put it on the laundry room trashcan"
+        "text": "I will go to the kitchen and then to the living room table"
       },
       {
         "action": "navigate",
-        "location": "storage rack"
-      },
-      {
-        "action": "pick_up",
-        "object": "butter"
+        "location": "kitchen"
       },
       {
         "action": "navigate",
-        "location": "laundry room trashcan"
-      },
-      {
-        "action": "place",
-        "object": "butter",
-        "location": "laundry room trashcan"
-      }
-    ],
-    [
-      {
-        "action": "say",
-        "text": "I will go to the book shelf, find the person pointing to the right and tell them my team's name"
-      },
-      {
-        "action": "navigate",
-        "location": "book shelf"
-      },
-      {
-        "action": "find",
-        "person": "person pointing to the right"
-      },
-      {
-        "action": "say",
-        "text": "<team name>"
-      }
-    ],
-    [
-      {
-        "action": "say",
-        "text": "I will open the cupboard"
-      },
-      {
-        "action": "navigate",
-        "location": "cupboard"
-      },
-      {
-        "action": "open",
-        "location": "cupboard"
+        "location": "living room table"
       }
     ]
   ]

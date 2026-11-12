@@ -47,6 +47,32 @@ class MissingActionArgument(DataclassException):
         )
 
 
+@dataclass
+class ObjectNotInRoom(DataclassException):
+    """
+    Raised when a step names an object in a room that holds no object of that kind.
+    """
+
+    object_type: type[HasRootBody]
+    """
+    The kind of object the step names.
+    """
+
+    room: Room
+    """
+    The room the object was looked for in.
+    """
+
+    def error_message(self) -> str:
+        return f"No {self.object_type.__name__} stands in the room '{self.room.name}'."
+
+    def suggest_correction(self) -> str:
+        return (
+            f"Put a {self.object_type.__name__} into '{self.room.name}', or search for "
+            f"it before the step, once searching is implemented."
+        )
+
+
 # %% Placing
 
 

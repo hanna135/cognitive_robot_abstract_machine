@@ -15,7 +15,7 @@ from challenges.GPSR.action_mapping.action_mapping import (
     PayloadKey,
     PlannedAction,
 )
-from coraplex.robot_plans.actions.core.navigation import NavigateAction
+from coraplex.robot_plans.actions.core.navigation import PathPlanningNavigateAction
 from coraplex.robot_plans.actions.core.talking import TalkingAction
 from cramph.context import StatechartContext
 from coraplex.robot_plans.transformation_by_room import RoomVisitPlanner
@@ -103,10 +103,11 @@ def test_actions_keep_their_order_and_fields(
     say = payload[PayloadKey.PLANS][0][0]
     [kitchen_room] = context.world.get_semantic_annotations_by_type(Kitchen)
     [living_room_room] = context.world.get_semantic_annotations_by_type(LivingRoom)
-    assert [type(action.action_type) for action in plan.actions] == [
-        TalkingAction,
-        NavigateAction,
-        NavigateAction,
+    talking, *drives = [action.action_type for action in plan.actions]
+    assert type(talking) is TalkingAction
+    assert [drive._type_ for drive in drives] == [
+        PathPlanningNavigateAction,
+        PathPlanningNavigateAction,
     ]
     assert plan.actions[0].action_type.speaking_text == say[PayloadKey.TEXT]
     assert [action.location for action in plan.actions] == [

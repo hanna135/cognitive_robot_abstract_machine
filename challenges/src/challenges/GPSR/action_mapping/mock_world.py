@@ -20,8 +20,6 @@ from challenges.GPSR.action_mapping.action_mapping import (
     PersonDetection,
     main as action_main,
 )
-from pathlib import Path
-
 from cramspeech.inference.plan_model import PlanModel
 from cramspeech.microphone import Microphone
 from cramspeech.speech_recognizer import SpeechRecognizer
@@ -33,6 +31,8 @@ from coraplex.plans.executors import PhysicallySimulatedPlanExecutor, PlanExecut
 from coraplex.robot_plans.transformation_by_room import RoomVisitPlanner
 from cramph.composites import Sequence
 from cramph.context import ContextExtension, StatechartContext
+from cramph.executor import ExecutorExtension
+from giskardpy.motion_control import MotionControl
 from cramph.statechart import Statechart
 from krrood.patterns.path_enumeration import PathEnumeration
 from robokudo.analysis_engine_process import AnalysisEngineProcess
@@ -47,12 +47,16 @@ from semantic_digital_twin.adapters.multi_sim import (
 )
 from semantic_digital_twin.adapters.package_resolver import SearchPathFileResolver
 from semantic_digital_twin.adapters.urdf import URDFParser
+from semantic_digital_twin.collision_checking.collision_rules import (
+    AllowCollisionBetweenGroups,
+)
 from semantic_digital_twin.datastructures.prefixed_name import PrefixedName
 from semantic_digital_twin.predefined_maps.kitchen_environment import KitchenEnvironment
 from semantic_digital_twin.robots.hsrb import HSRB, HSRBHeadRGBDCamera
 from semantic_digital_twin.robots.robot_parts import AbstractRobot
 from semantic_digital_twin.semantic_annotations.semantic_annotations import (
     Bedroom,
+    Floor,
     Human,
     Kitchen,
     LivingRoom,
@@ -84,6 +88,9 @@ class SceneName(StrEnum):
     call them."""
 
     COUNTER_TOP = "counter_top"
+    OVEN_TOWER = "oven_tower"
+    SIDEBOARD = "sideboard"
+    """The top of the kitchen island."""
     KITCHEN = "kitchen"
     LIVING_ROOM = "living_room"
     BED_ROOM = "bed_room"
@@ -144,6 +151,29 @@ class OncePerCallSyncedMujocoSim(MujocoSim):
         super().step_simulation(last_step)
 
 
+@dataclass
+class PhysicallySimulatedGraspingPlanExecutor(PhysicallySimulatedPlanExecutor):
+    """
+    A physically simulated executor that still counts the robot as at rest while its
+    fingers press on an object they hold by friction.
+    """
+
+    speed_at_rest: float = field(default=0.05, kw_only=True)
+    """
+    The fastest a degree of freedom may move for the robot to count as at rest; fingers
+    pressing on a held carton keep moving at about 0.04.
+    """
+
+    def default_executor_extensions(self) -> list[ExecutorExtension]:
+        """Differs from :meth:`PhysicallySimulatedPlanExecutor.default_executor_ext
+        ensions` in counting the robot as at rest up to :attr:`speed_at_rest`."""
+        extensions = super().default_executor_extensions()
+        for extension in extensions:
+            if isinstance(extension, MotionControl):
+                extension.speed_at_rest = self.speed_at_rest
+        return extensions
+
+
 # %% Demonstration
 
 
@@ -153,17 +183,17 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     The robot carries out the actions mapped from the generated command of
     :func:`~challenges.GPSR.action_mapping.action_mapping.main`, in the kitchen of
     :class:`~semantic_digital_twin.predefined_maps.kitchen_environment.KitchenEnvironment`
-    with rooms of their kind, a milk carton on its counter top and a person in its
-    kitchen room.
+    with rooms of their kind, a milk carton on its counter top and a person at its
+    kitchen window.
     """
 
     used_robot: type[AbstractRobot] = HSRB
 
     ros_node_name: str = "gpsr_generated_command_demo"
 
-    executor_type: type[PlanExecutor] = PhysicallySimulatedPlanExecutor
+    executor_type: type[PlanExecutor] = PhysicallySimulatedGraspingPlanExecutor
 
-    collision_avoidance: bool = False
+    collision_avoidance: bool = True
 
     scene_joints_movable: bool = False
 
@@ -175,6 +205,14 @@ class GeneratedCommandDemonstration(RobotDemonstration):
         }
     )
     """The kind of each of the kitchen's rooms, by the room's name."""
+
+    kitchen_environment: KitchenEnvironment = field(default_factory=KitchenEnvironment)
+    """The kitchen the scene is built from, whose measurements place the
+    person."""
+
+    person_distance_to_window: float = 0.25
+    """The gap between the person's back and the front edge of the window sill,
+    in m."""
 
     friction_cone: mujoco.mjtCone = mujoco.mjtCone.mjCONE_ELLIPTIC
     """The friction cone the contacts use; the elliptic cone keeps a held
@@ -212,10 +250,7 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     collides with nothing outside that category."""
 
     json_plan: str = ""
-
-    person_distance_behind_kitchen_centre: float = 1.0
-    """How far, in m, the human stands behind the middle of the kitchen floor,
-    seen from the origin of the world, where the robot starts."""
+    """The plan JSON the plan model wrote for the command the robot carries out."""
 
     def scene_specification(self) -> WorldSpecification:
         """Never called: :meth:`build_scene` builds the kitchen directly, since
@@ -227,7 +262,7 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     def build_scene(self) -> World:
         """Differs from :meth:`RobotDemonstration.build_scene` in starting from
         the kitchen instead of :meth:`scene_specification`."""
-        scene = KitchenEnvironment().create_world()
+        scene = self.kitchen_environment.create_world()
         self.populate_scene(scene)
         if not self.scene_joints_movable:
             self.replace_joints_with_fixed_connections(scene)
@@ -239,9 +274,28 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     def build_simulated_world(self) -> World:
         """Differs from :meth:`RobotDemonstration.build_simulated_world` in
         letting every part of the robot but its grippers pass through the
-        scene."""
+        scene in the physics, and in letting the robot touch the floors, which
+        collision avoidance would otherwise keep it from standing on, and the
+        milk, which only friction holds in the gripper, so collision avoidance
+        never counts it as held."""
         world = super().build_simulated_world()
         robot = world.get_semantic_annotations_by_type(self.used_robot)[0]
+        floor_bodies = [
+            body
+            for floor in world.get_semantic_annotations_by_type(Floor)
+            for body in floor.bodies
+        ]
+        with world.modify_world():
+            for touched_bodies in (
+                floor_bodies,
+                [world.get_body_by_name(SceneName.MILK)],
+            ):
+                world.collision_manager.add_ignore_collision_rule(
+                    AllowCollisionBetweenGroups(
+                        body_group_a=robot.bodies_with_collision,
+                        body_group_b=touched_bodies,
+                    )
+                )
         gripper_bodies = {
             body
             for arm in robot.all_arms
@@ -278,7 +332,7 @@ class GeneratedCommandDemonstration(RobotDemonstration):
 
     def populate_scene(self, world: World) -> None:
         """Give the kitchen's rooms their kinds, stand the milk on the counter
-        top and the person in the kitchen room."""
+        top and the person at the kitchen window."""
         self.assign_room_types(world)
         self.place_milk(world)
         self.place_person(world)
@@ -391,9 +445,9 @@ class GeneratedCommandDemonstration(RobotDemonstration):
     def place_person(self, world: World) -> Person:
         """
         :param world: The kitchen.
-        :return: A new human standing
-            :attr:`person_distance_behind_kitchen_centre` behind the middle of the
-            kitchen room, facing the origin of the world, where the robot starts.
+        :return: A new human standing on the kitchen floor with their back to the
+            window wall, :attr:`person_distance_to_window` in front of its sill and
+            midway between the oven tower and the sideboard, facing into the kitchen.
             Nothing in the simulation collides with the human.
         """
         human_world = URDFParser.from_file(
@@ -403,22 +457,40 @@ class GeneratedCommandDemonstration(RobotDemonstration):
             ),
         ).create_world()
         kitchen = world.get_semantic_annotation_by_name(SceneName.KITCHEN)
-        standing_position = self.centred_standing_pose(
-            human_world.root, kitchen.floor.root, world
-        ).position
-        x, y, z = (float(coordinate) for coordinate in standing_position.to_np()[:3])
-        scale = 1 + self.person_distance_behind_kitchen_centre / numpy.hypot(x, y)
-        x, y = x * scale, y * scale
+        *_, floor_height = (
+            float(coordinate)
+            for coordinate in self.centred_standing_pose(
+                human_world.root, kitchen.floor.root, world
+            ).position.to_np()[:3]
+        )
+        window_wall = self.kitchen_environment.measurements.window_wall
+        oven_tower_box = (
+            world.get_body_by_name(SceneName.OVEN_TOWER)
+            .collision.as_bounding_box_collection_in_frame(world.root)
+            .bounding_box()
+        )
+        sideboard_box = (
+            world.get_body_by_name(SceneName.SIDEBOARD)
+            .collision.as_bounding_box_collection_in_frame(world.root)
+            .bounding_box()
+        )
+        human_box = human_world.root.collision.as_bounding_box_collection_in_frame(
+            human_world.root
+        ).bounding_box()
+        # The window wall closes the kitchen towards +x, so a yaw of pi turns the
+        # human's back (their -x side) to it.
         world.merge_world(
             human_world,
             root_connection=FixedConnection(
                 parent=world.root,
                 child=human_world.root,
                 parent_T_connection_expression=HomogeneousTransformationMatrix.from_xyz_rpy(
-                    x=x,
-                    y=y,
-                    z=z,
-                    yaw=numpy.arctan2(-y, -x),
+                    x=window_wall.sill_front_x
+                    - self.person_distance_to_window
+                    + human_box.min_x,
+                    y=(oven_tower_box.max_y + sideboard_box.min_y) / 2,
+                    z=floor_height,
+                    yaw=numpy.pi,
                     reference_frame=world.root,
                 ),
             ),
@@ -495,23 +567,30 @@ class GeneratedCommandDemonstration(RobotDemonstration):
         body.parent_connection.origin = world_root_T_body
 
 
-def main(headless: bool = False, perceives: bool = True) -> World:
+def main(
+    headless: bool = False,
+    perceives: bool = True,
+    instruction: str | None = None,
+    plan_model_path: Path = Path.home() / "Downloads" / "plan-q4.gguf",
+) -> World:
     """Run the demonstration.
 
     :param headless: Whether the physics runs without a viewer.
     :param perceives: Whether RoboKudo is started and asked to detect the person.
+    :param instruction: The command the robot carries out, or ``None`` to hear it
+        through the microphone.
+    :param plan_model_path: The GGUF file of the model that writes the plans for the
+        command.
     :return: The world the command was carried out in.
     """
-    recognizer = SpeechRecognizer(
-        microphone=Microphone(), transcriber=WhisperTranscriber()
-    )
-    plan_model = PlanModel(
-        model_path=Path("/home/hanna/SUTURO_Master/nlp_llm/plan-q4.gguf")
-    )
-
-    print("SPEAK NOW...................")
-    transcript = recognizer.hear_next_utterance(timeout=30.0)
-    instruction_plans = plan_model.write_plans(transcript.text)
+    plan_model = PlanModel(model_path=plan_model_path)
+    if instruction is None:
+        recognizer = SpeechRecognizer(
+            microphone=Microphone(), transcriber=WhisperTranscriber()
+        )
+        print("SPEAK NOW...................")
+        instruction = recognizer.hear_next_utterance(timeout=30.0).text
+    instruction_plans = plan_model.write_plans(instruction)
 
     json_plan = json.dumps(instruction_plans.to_json(), separators=(",", ":"))
     print(json_plan)

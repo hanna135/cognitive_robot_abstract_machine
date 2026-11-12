@@ -32,15 +32,22 @@ from coraplex.robot_plans.actions.composite.transporting import (
     MoveAndPlaceAction,
 )
 from coraplex.robot_plans.actions.composite.searching import SearchAction
-from coraplex.robot_plans.actions.core.navigation import FaceAtAction, NavigateAction
+from coraplex.robot_plans.actions.core.navigation import (
+    FaceAtAction,
+    NavigateAction,
+    PathPlanningNavigateAction,
+)
 from coraplex.robot_plans.actions.core.pick_up import PickUpAction
 from coraplex.robot_plans.actions.core.placing import PlaceAction
 from coraplex.robot_plans.actions.core.talking import TalkingAction
 from coraplex.robot_plans.task_definitions import Command, Step
 from cramph.context import ContextExtension, StatechartContext
 from cramph.node import StatechartNode
+from krrood.entity_query_language.factories import a
 from krrood.entity_query_language.query.match import Match
 from krrood_spatial_math.spatial_types import Pose
+from semantic_digital_twin.collision_checking.collision_matrix import CollisionRule
+from semantic_digital_twin.collision_checking.collision_rules import AllowAllCollisions
 from semantic_digital_twin.grasping.grasp_candidates import GraspCandidate
 from semantic_digital_twin.reasoning.predicates import OverFloorPlan
 from semantic_digital_twin.reasoning.queries import (
@@ -127,8 +134,8 @@ class PersonDetection(ContextExtension):
 @dataclass(eq=False, repr=False, kw_only=True)
 class FindPersonAction(SequentialAction):
     """
-    Drives to stand in front of a person, facing them, and, if a detection is given,
-    asks the perception pipeline to detect them.
+    Drives around the furniture and walls to stand in front of a person, facing them,
+    and, if a detection is given, asks the perception pipeline to detect them.
     """
 
     person: Human
@@ -147,20 +154,97 @@ class FindPersonAction(SequentialAction):
     only drive in front of them.
     """
 
-    def create_steps(self) -> list[StatechartNode]:
-        steps: list[StatechartNode] = [
-            NavigateAction(
-                target_location=Pose.from_xyz_rpy(
-                    x=self.viewing_distance,
-                    yaw=numpy.pi,
-                    reference_frame=self.person.root,
-                )
+    def create_steps(self) -> list[StatechartNode | Match]:
+        viewing_pose = Pose.from_xyz_rpy(
+            x=self.viewing_distance,
+            yaw=numpy.pi,
+            reference_frame=self.person.root,
+        )
+        steps: list[StatechartNode | Match] = [
+            a(PathPlanningNavigateAction)(
+                target=self.world.transform(viewing_pose, self.world.root)
             ),
             FaceAtAction(target=Pose(reference_frame=self.person.root)),
         ]
         if self.detection is not None:
             steps.append(RoboKudoQueryTask(query=self.detection))
         return steps
+
+
+@dataclass(eq=False, repr=False, kw_only=True)
+class CollisionAllowingAction(SequentialAction):
+    """
+    Performs an action during which the robot may touch anything; collision avoidance
+    holds again once the action ended.
+    """
+
+    performed_action: Action
+    """
+    The action performed while the robot may touch anything.
+    """
+
+    def create_temporary_collision_rules(self) -> list[CollisionRule]:
+        """
+        Differs from :meth:`Action.create_temporary_collision_rules` in allowing every
+        collision.
+        """
+        return [AllowAllCollisions()]
+
+    def create_steps(self) -> list[StatechartNode]:
+        return [self.performed_action]
+
+
+@dataclass(eq=False, repr=False, kw_only=True)
+class ManipulationAtStandingPoseAction(SequentialAction):
+    """
+    Drives around the furniture and walls, avoiding collisions, to one base radius in
+    front of where the robot stands for a manipulation, then performs the manipulation,
+    which drives the last stretch and during which the robot may touch anything.
+
+    .. note:: The standing pose may lie closer to the furniture than a planned path
+        keeps the base.
+    """
+
+    standing_pose: Pose
+    """
+    Where the robot's base stands while it performs :attr:`manipulation`.
+    """
+
+    manipulated_location: Pose
+    """
+    Where the manipulation reaches to: the object it picks up or the place it puts the
+    object down.
+    """
+
+    manipulation: Action
+    """
+    What the robot does with its arm once it stands at :attr:`standing_pose`, starting
+    with driving there.
+    """
+
+    def create_steps(self) -> list[StatechartNode | Match]:
+        root = self.world.root
+        approach_pose = self.world.transform(self.standing_pose, root)
+        world_P_manipulated = self.world.transform(
+            self.manipulated_location, root
+        ).position
+        away_from_manipulated = numpy.array(
+            [
+                float(approach_pose.x) - float(world_P_manipulated.x),
+                float(approach_pose.y) - float(world_P_manipulated.y),
+            ]
+        )
+        step_back = (
+            self.robot.mobile_base.base_radius
+            * away_from_manipulated
+            / numpy.linalg.norm(away_from_manipulated)
+        )
+        approach_pose.x = float(approach_pose.x) + step_back[0]
+        approach_pose.y = float(approach_pose.y) + step_back[1]
+        return [
+            a(PathPlanningNavigateAction)(target=approach_pose),
+            CollisionAllowingAction(performed_action=self.manipulation),
+        ]
 
 
 # %% Plans
@@ -266,7 +350,7 @@ class PlannedAction:
                     raise MissingActionArgument(
                         action=ActionType.NAVIGATE, argument=PayloadKey.LOCATION
                     )
-                action = NavigateAction(target_location=location_coordinates)
+                action = a(PathPlanningNavigateAction)(target=location_coordinates)
             case ActionType.PICK_UP:
                 action = cls.pick_up_from_reachable_standing_pose(
                     searched_object, context
@@ -354,14 +438,15 @@ class PlannedAction:
     @staticmethod
     def pick_up_from_reachable_standing_pose(
         graspable: HasGraspCandidates, context: StatechartContext
-    ) -> MoveAndPickUpAction:
+    ) -> ManipulationAtStandingPoseAction:
         """
         :param graspable: The object to pick up.
         :param context: The context of the plan, whose robot picks the object up with
             its first arm.
         :return: A pick-up that drives to the first standing pose the reachability
             costmap offers, and takes the object by the grasp closest to the robot
-            standing there that the gripper opens wide enough for.
+            standing there that the gripper opens wide enough for, touching anything
+            while it does.
         :raises NoGraspFitsGripper: If every grasp is wider than the gripper opens.
         """
         arm = context.require_extension(RobotAccess).robot.all_arms[0]
@@ -387,8 +472,12 @@ class PlannedAction:
         )
         if fitting_grasp is None:
             raise NoGraspFitsGripper(graspable=graspable, gripper=arm.end_effector)
-        return MoveAndPickUpAction.from_standing_position(
-            standing_pose, fitting_grasp, arm
+        return ManipulationAtStandingPoseAction(
+            standing_pose=standing_pose,
+            manipulated_location=Pose(reference_frame=graspable.root),
+            manipulation=MoveAndPickUpAction.from_standing_position(
+                standing_pose, fitting_grasp, arm
+            ),
         )
 
     @staticmethod
@@ -396,21 +485,26 @@ class PlannedAction:
         held_object: HasGraspCandidates,
         target_location: Pose,
         context: StatechartContext,
-    ) -> MoveAndPlaceAction:
+    ) -> ManipulationAtStandingPoseAction:
         """
         :param held_object: The object to put down, held by the robot's first arm.
         :param target_location: Where to put the object down.
         :param context: The context of the plan, whose robot places the object.
         :return: A placing that carries the object to the first standing pose the
-            reachability costmap offers for ``target_location`` and puts it down there.
+            reachability costmap offers for ``target_location`` and puts it down there,
+            touching anything while it does.
         """
         arm = context.require_extension(RobotAccess).robot.all_arms[0]
         standing_pose = PlannedAction.standing_pose_on_floor(
             ReachabilityLocation(target_pose=target_location, arm=arm, context=context),
             context.world,
         )
-        return MoveAndPlaceAction.from_standing_position(
-            standing_pose, target_location, held_object, arm
+        return ManipulationAtStandingPoseAction(
+            standing_pose=standing_pose,
+            manipulated_location=target_location,
+            manipulation=MoveAndPlaceAction.from_standing_position(
+                standing_pose, target_location, held_object, arm
+            ),
         )
 
     @staticmethod
